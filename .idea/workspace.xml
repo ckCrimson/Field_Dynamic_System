@@ -27,6 +27,7 @@
     "RunOnceActivity.ShowReadmeOnStart": "true",
     "RunOnceActivity.TerminalTabsStorage.copyFrom.TerminalArrangementManager.252": "true",
     "git-widget-placeholder": "main",
+    "last_opened_file_path": "C:/Users/sheet/PyCharmMiscProject",
     "node.js.detected.package.eslint": "true",
     "node.js.detected.package.tslint": "true",
     "node.js.selected.package.eslint": "(autodetect)",
@@ -38,6 +39,7 @@
   <component name="SharedIndexes">
     <attachedChunks>
       <set>
+        <option value="bundled-js-predefined-d6986cc7102b-b598e85cdad2-JavaScript-PY-252.25557.130" />
         <option value="bundled-python-sdk-1bde30d8e611-7b97d883f26b-com.jetbrains.pycharm.pro.sharedIndexes.bundled-PY-252.25557.130" />
       </set>
     </attachedChunks>
@@ -52,6 +54,7 @@
       <workItem from="1754830153666" duration="138000" />
       <workItem from="1754830392401" duration="3123000" />
       <workItem from="1756532980816" duration="1916000" />
+      <workItem from="1756535099079" duration="24022000" />
     </task>
     <servers />
   </component>
