@@ -1,37 +1,44 @@
 # Field Dynamic Systems (FDS)
-*A Python OOP framework for building, evolving, and studying dynamic systems with **weighted states** (“fields”).*
+*A Python OOP framework for building, evolving, and studying dynamic systems with **weighted states** (“fields”).*  
+> This README includes short **definitions** and a **simple, practical flow** for defining classes so you can build a complete FDS stack from scratch.
 
 ---
 
-## Overview
-**FDS** models systems as **State Spaces + Fields + Operators**, then evolves them with an **Evolution Engine** (path-integral / sum-over-histories style). It’s designed for research and experimentation where transition **weights** (not just fixed matrices) control dynamics. The framework includes patterns and examples spanning biased random walks, sampling/“dice” processes, symmetry/mappings between systems, and stability tooling.
-
-
----
-
-## Features
-- **Clean OOP design**: `State`, `StateSpace`, `Field` (real/complex), `Operator`, `EvolutionEngine`, `Ensemble`, `Mapping`, etc.
-- **Path-integral recurrence**: multi-step distributions over reachable sets/layers.
-- **Deterministic & stochastic evolution**: expectation operators and samplers.
-- **Composability**: map fields between spaces, couple multiple systems, aggregate global fields.
-- **Stability & metrics**: hooks for Lyapunov-style analysis on probabilistic evolution.
-- **Research-ready**: minimal, hackable, and easy to extend.
+## What is this, in one paragraph?
+FDS treats a system as a **State Space** (the where), a **Field** (the weights on states), and **Operators** (the how), all orchestrated by an **Evolution Engine** that advances distributions over time. You can plug in different spaces (ℤ, ℤ², lattices), field types (real/complex), and operators (deterministic expectation, stochastic sampling) to model biased random walks, sampling (“dice”) processes, coupled systems, and symmetry/mappings between systems.
 
 ---
 
-## Install
-```bash
-git clone https://github.com/<your-user>/<your-repo>.git
-cd <your-repo>
+## Mini-Glossary (short, useful definitions)
 
-# (recommended) create a virtual environment
-python -m venv .venv
-# Windows: .venv\Scripts\activate
-source .venv/bin/activate
+- **State**: A single configuration point (e.g., integer `x` on ℤ, coordinate `(i,j)` on a grid).
+- **State Space**: The set of all states **plus** topology (neighbors/metric). Example: 1D line with step size 1.
+- **Distribution**: A weight/probability assignment over states (pmf). Supports normalize, mean, var, etc.
+- **FieldValue**: The atomic value held at each state by a field (real, complex, vector, etc.).
+- **Field**: A (possibly time-varying) mapping `state → FieldValue`.  
+  - *Global field*: background influence accessible everywhere.  
+  - *Local/temporary field*: contextual or operator-specific weights.
+- **Kernel (Transition Weights)**: Function turning local info/fields into transition weights to neighbors.
+- **Operator**: Rule that transforms a **Distribution** using **Field/Kernel** (e.g., expectation, sampling).
+- **Evolution Engine**: Multi-step coordinator that applies operators, tracks reachable sets/layers, logs history.
+- **Mapping**: Relation between spaces; supports push/pull of **Fields** and **Distributions** across spaces.
+- **Aggregator**: Combines many fields/signals (sum, max, composition) with conflict/priority rules.
+- **Ensemble**: A coupled collection of systems that publish/subscribe fields or otherwise influence each other.
+- **Metrics/Stability**: Distances/divergences over distributions and Lyapunov-style indicators.
 
-# install dependencies (if provided)
-pip install -U pip
-pip install -r requirements.txt
+---
 
-# or develop locally
-pip install -e .
+## Build Flow (define classes in this order)
+> Follow this sequence to avoid circular deps and keep interfaces clean. Each step shows the **goal** and a **minimal stub**.
+
+### 1) Foundations (value types & ids)
+**Goal:** shared types/utilities without domain logic.
+```python
+# fds/core/types.py
+from typing import Protocol, Any
+
+class FieldValue(Protocol):
+    def __add__(self, other: Any) -> "FieldValue": ...
+    def __mul__(self, scalar: float) -> "FieldValue": ...
+    @staticmethod
+    def zero() -> "FieldValue": ...
