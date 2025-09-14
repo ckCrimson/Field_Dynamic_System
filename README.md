@@ -6,8 +6,6 @@
 ## Overview
 **FDS** models systems as **State Spaces + Fields + Operators**, then evolves them with an **Evolution Engine** (path-integral / sum-over-histories style). It’s designed for research and experimentation where transition **weights** (not just fixed matrices) control dynamics. The framework includes patterns and examples spanning biased random walks, sampling/“dice” processes, symmetry/mappings between systems, and stability tooling.
 
-For the full theory and notation, see the companion paper:
-- `paper/On_the_formulation_and_application_of_dynamic_systems_with_weighted_states.pdf`
 
 ---
 
