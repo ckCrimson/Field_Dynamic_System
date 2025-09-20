@@ -60,8 +60,9 @@ all orchestrated by an **Evolution Engine** that advances the system in discrete
 
 ## Quick Install
 ```bash
-git clone https://github.com/<your-user>/<your-repo>.git
-cd <your-repo>
+git clone https://github.com/ckCrimson/Field_Dynamic_System
+.git
+cd Field_Dynamic_System
 python -m venv .venv
 # Windows: .venv\Scripts\activate
 source .venv/bin/activate
