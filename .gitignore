@@ -1,0 +1,28 @@
+# OS / Windows
+/System Volume Information/
+/$RECYCLE.BIN/
+Thumbs.db
+
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+build/
+dist/
+
+# Virtual envs
+.venv*/
+env/
+venv/
+
+# IDE
+.idea/
+*.iml
+
+# Jupyter
+.ipynb_checkpoints/
+
+# Archives
+*.zip
+*.rar
+*.7z
