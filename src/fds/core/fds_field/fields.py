@@ -84,3 +84,7 @@ class Field(Generic[S]):
 
     def plot_field(self):
         """A method which can be implemented to plot the field if possible"""
+
+    def set_unit_field_at_state(self,inp_state:State):
+        self.set_zero_field()
+        self.set_field(inp_state,self.get_unit_field())

@@ -76,9 +76,8 @@ class FieldDynamicSystem(FieldStaticDynamicSystem[S], Generic[S]):
         """Evolves the system by building l step field and applying the operator"""
         l_step_field = self.multi_step_field_generator(steps, **params)
         self.operator.apply(l_step_field,self.transition_list)
-        self.field.set_zero_field()
-        self.field.set_field(self.transition_list[-1],self.field.get_unit_field())
         self.initial_state =   (self.transition_list[-1])
+        self.field.set_unit_field_at_state(self.initial_state)
         self.repition =  True
 
     def evolve_from_field(self):

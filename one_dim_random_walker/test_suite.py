@@ -6,6 +6,7 @@ from one_dim_random_walker.core.states.multi_step_reaching import OneDimensionMu
 from one_dim_random_walker.core.states.reachable import OneDimensionReachable
 from one_dim_random_walker.core.states.state import IntegerState
 from one_dim_random_walker.core.states.state_space import IntegerLine
+from one_dim_random_walker.dynamic_systems.dynamic_system import OneDimWalkerFieldDynamicSystem
 from one_dim_random_walker.dynamics.multi_step_field import OneDimRandomWalkerMultiStep
 from one_dim_random_walker.dynamics.operators import OneDimRandomWalkerExpectationOperator, \
     OneDimRandomWalkerSampleOperator
@@ -193,14 +194,35 @@ prev_field_input.set_zero_field()
 prev_field_input.set_field(initial_state,RealFieldValue(RealSingleFieldValue(1)))
 
 
-multi_field=one_dim_multi_step.generate_multi_step_field(space,initial_state,34,single_transformed_field_proto,single_step_transformed_field_proto,
-                                             prev_field_input )
-multi_field.plot_field()
+multi_field=one_dim_multi_step.generate_multi_step_field(space,initial_state,3,single_transformed_field_proto,single_step_transformed_field_proto,
+                                              prev_field_input )
+# multi_field.plot_field()
 #----------- Operator ------------------#
 
+#
+# print("Expectation_operator: " , OneDimRandomWalkerExpectationOperator().get_next_state(multi_field) )
+# print("Probabiliostic_operator: " , OneDimRandomWalkerSampleOperator().get_next_state(multi_field) )
+#
 
-print("Expectation_operator: " , OneDimRandomWalkerExpectationOperator().get_next_state(multi_field) )
-print("Probabiliostic_operator: " , OneDimRandomWalkerSampleOperator().get_next_state(multi_field) )
+# -----------Dynamic System ----------------#
+
+sys_field=RealField.from_length(100,initial_state)
+
+sys_field.set_unit_field_at_state(initial_state)
+
+#sys_field.plot_field()
 
 
-# -----------
+
+one_dim_walker_fds  = OneDimWalkerFieldDynamicSystem(initial_state,sys_field,OneDimRandomWalkerMultiStep(2),OneDimensionReachable(2),OneDimRandomWalkerSampleOperator())
+print(one_dim_walker_fds.transition_list)
+one_dim_walker_fds.evolve(2)
+print(one_dim_walker_fds.field.get_field(one_dim_walker_fds.initial_state).data.value)
+print(one_dim_walker_fds.transition_list)
+one_dim_walker_fds.evolve(13)
+print(one_dim_walker_fds.field.get_field(one_dim_walker_fds.initial_state).data.value)
+print(one_dim_walker_fds.transition_list)
+one_dim_walker_fds.evolve(13)
+print(one_dim_walker_fds.field.get_field(one_dim_walker_fds.initial_state).data.value)
+print(one_dim_walker_fds.transition_list)
+print(one_dim_walker_fds.field.get_field(one_dim_walker_fds.initial_state).data.value)
