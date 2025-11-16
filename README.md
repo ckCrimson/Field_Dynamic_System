@@ -60,9 +60,9 @@ However, these often struggle to:
 
 At a high level, an FDS consists of:
 
-- a **state space** \( S \): all possible states a system can be in,
-- one or more **fields** \( F \): values associated to states or transitions, which encode “how much the system likes” those states or transitions,
-- **operators** \( \Theta \): rules that use fields to advance the system in time (probabilistic or deterministic),
+- a **state space** $S$: all possible states a system can be in,
+- one or more **fields** $F$: values associated to states or transitions, which encode “how much the system likes” those states or transitions,
+- **operators** $\Theta$: rules that use fields to advance the system in time (probabilistic or deterministic),
 - a **path-integral style** view of multi-step evolution: probabilities are built by summing contributions over all possible paths.
 
 On top of this, the framework has two higher-level constructions:
@@ -82,12 +82,12 @@ A *state* is a single configuration of a system at an instant. It is the basic u
 Examples (conceptual, not code):
 
 - a position on a 1D or 2D lattice,
-- a pair \((x, \kappa)\) describing position and a bias/“momentum-like” parameter,
+- a pair $(x, \kappa)$ describing position and a bias/“momentum-like” parameter,
 - a vector of frequencies representing how many times each dice face has appeared,
 - a macroscopic variable like temperature or sample mean.
 
 **State Space**  
-The **state space** \( S \) is the set of all states a system can occupy.
+The **state space** $S$ is the set of all states a system can occupy.
 
 It determines:
 
@@ -96,10 +96,10 @@ It determines:
 - what kind of distances or topologies we can define.
 
 **Reachable States**  
-Given an initial state \( s_0 \), the **reachable states** are those that can be reached from \( s_0 \) by valid transitions in any finite number of steps.
+Given an initial state $s_0$, the **reachable states** are those that can be reached from $s_0$ by valid transitions in any finite number of steps.
 
 **Reaching States**  
-For a given state \( s \), the **reaching states** are those that can transition directly *into* \( s \).  
+For a given state $s$, the **reaching states** are those that can transition directly *into* $s$.  
 This concept is key when we build recurrence relations for multi-step evolution.
 
 ---
@@ -108,10 +108,12 @@ This concept is key when we build recurrence relations for multi-step evolution.
 
 **Field**  
 A **field** assigns a value to each state or transition. In general,
-\[
-F: S \to \mathcal{V} \quad \text{or} \quad F: S \times S \to \mathcal{V},
-\]
-where \(\mathcal{V}\) is some value space (e.g. real numbers, complex numbers, vectors, tensors).
+$$
+F: S \to \mathcal{V}
+\quad \text{or} \quad
+F: S \times S \to \mathcal{V},
+$$
+where $\mathcal{V}$ is some value space (e.g. real numbers, complex numbers, vectors, tensors).
 
 A field value might represent:
 
@@ -123,8 +125,8 @@ A field value might represent:
 Fields are the main way we encode information that influences the dynamics.
 
 **Field Value**  
-The **field value** at state \( s \) is \( F(s) \).  
-The **field value** for a transition \( s \to s' \) is \( F(s' \mid s) \).
+The **field value** at state $s$ is $F(s)$.  
+The **field value** for a transition $s \to s'$ is $F(s' \mid s)$.
 
 For many systems, the field values (or their norms) define transition probabilities after normalization.
 
@@ -134,14 +136,14 @@ For many systems, the field values (or their norms) define transition probabilit
 
 **Kernel**  
 A **kernel** is a rule (or a field) that assigns weights to candidate next states given a current state. Conceptually:
-\[
+$$
 K(s \to s') = \text{weight}(s, s').
-\]
+$$
 
 The kernel describes the *tendency* of the system to move from one state to another before normalization.
 
 **Operator**  
-An **operator** \(\Theta\) updates the system by one step using fields and kernels. Depending on the context, it can:
+An **operator** $\Theta$ updates the system by one step using fields and kernels. Depending on the context, it can:
 
 - produce a new **probability distribution** over states, or
 - produce a new **observed state**.
@@ -151,11 +153,13 @@ Two common types:
 - **Probabilistic operator**: samples the next state from a distribution defined by fields/kernels.
 - **Deterministic operator**: picks a single next state (e.g., via an expectation or argmax rule).
 
-By applying \(\Theta\) repeatedly, we get:
-\[
-s_{k+1} = \Theta(s_k) \quad \text{or} \quad P^{k+1} = \Theta(P^k),
-\]
-where \(P^k\) is a probability distribution at step \(k\).
+By applying $\Theta$ repeatedly, we get:
+$$
+s_{k+1} = \Theta(s_k)
+\quad \text{or} \quad
+P^{k+1} = \Theta(P^k),
+$$
+where $P^k$ is a probability distribution at step $k$.
 
 ---
 
@@ -163,23 +167,23 @@ where \(P^k\) is a probability distribution at step \(k\).
 
 **Path**  
 A **path** is a sequence of states:
-\[
+$$
 \pi = (s_0, s_1, \dots, s_\ell),
-\]
-obtained by applying the operator \(\Theta\) step-by-step (possibly probabilistically).
+$$
+obtained by applying the operator $\Theta$ step-by-step (possibly probabilistically).
 
 **Path Probability**  
 If transitions are Markovian, the probability of a path is:
-\[
+$$
 \mathbb{P}[\pi] = \prod_{k=1}^{\ell} P(s_k \mid s_{k-1}),
-\]
-where each \( P(s_k \mid s_{k-1}) \) is derived from fields and kernels.
+$$
+where each $P(s_k \mid s_{k-1})$ is derived from fields and kernels.
 
 **Path Integral / Sum Over Paths**  
-The probability of being in a state \( s_\ell \) after \(\ell\) steps is obtained by summing over all paths that end at \( s_\ell \):
-\[
+The probability of being in a state $s_\ell$ after $\ell$ steps is obtained by summing over all paths that end at $s_\ell$:
+$$
 P^\ell(s_\ell \mid s_0) = \sum_{\pi : s_0 \to s_\ell} \mathbb{P}[\pi].
-\]
+$$
 
 In practice, FDS uses a **recurrence relation** over *reaching* states instead of explicitly enumerating all paths. This is the core multi-step construction.
 
@@ -189,9 +193,9 @@ In practice, FDS uses a **recurrence relation** over *reaching* states instead o
 
 A **Dynamic System** in the FDS sense is a tuple containing:
 
-- a state space \( S \),
-- one or more fields \( F \) over \( S \),
-- one or more operators \( \Theta \) that evolve states/distributions using these fields.
+- a state space $S$,
+- one or more fields $F$ over $S$,
+- one or more operators $\Theta$ that evolve states/distributions using these fields.
 
 Examples of dynamic systems (conceptually):
 
@@ -216,16 +220,16 @@ Think in terms of:
 
 Consider two dynamic systems:
 
-- \( A_1 = (S_1, F_1, \Theta_1) \),
-- \( A_2 = (S_2, F_2, \Theta_2) \).
+- $A_1 = (S_1, F_1, \Theta_1)$,
+- $A_2 = (S_2, F_2, \Theta_2)$.
 
 We can define a **joint (combined) field**:
-\[
+$$
 F_{12}(s_1, s_2 : s_{10}, s_{20}),
-\]
+$$
 which assigns a weight or amplitude to pairs of states (or transitions) from both systems.
 
-- If the joint field factorizes cleanly into \(F_1\) and \(F_2\), the systems are *uncorrelated*.
+- If the joint field factorizes cleanly into $F_1$ and $F_2$, the systems are *uncorrelated*.
 - If not, the systems are *correlated* – their evolutions are statistically or structurally linked.
 
 In the affected framework, we care especially about **directional influence**.
@@ -255,20 +259,20 @@ The influence can appear as:
 ### 4.3 State Space Mappings
 
 To formalize relations between systems, we introduce **state space mappings**:
-\[
+$$
 M_{12}: S_1 \to \mathcal{P}(S_2),
-\]
-where \(\mathcal{P}(S_2)\) is the set of subsets of \(S_2\).
+$$
+where $\mathcal{P}(S_2)$ is the set of subsets of $S_2$.
 
 This mapping says:
 
-> To each state in \(S_1\), we associate one or more states (or a region) in \(S_2\).
+> To each state in $S_1$, we associate one or more states (or a region) in $S_2$.
 
 We also consider an “inverse-like” mapping:
-\[
+$$
 M_{12}^{-1}(s_2) = \{ s_1 \in S_1 \mid s_2 \in M_{12}(s_1) \},
-\]
-which tells us which states in \(S_1\) influence a particular state in \(S_2\).
+$$
+which tells us which states in $S_1$ influence a particular state in $S_2$.
 
 Within the affected framework, these mappings:
 
@@ -284,8 +288,8 @@ Sometimes, influence and symmetry appear at the level of **equivalence classes o
 
 **Equivalence Relation and Classes**
 
-- Define an equivalence relation \( \sim \) on a state space \( S \) (e.g., “same energy”, “same total count”).
-- The state space is partitioned into **equivalence classes** \( C_1, C_2, \dots \), each containing states that share some conserved or relevant quantity.
+- Define an equivalence relation $\sim$ on a state space $S$ (e.g., “same energy”, “same total count”).
+- The state space is partitioned into **equivalence classes** $C_1, C_2, \dots$, each containing states that share some conserved or relevant quantity.
 
 **Classed State Space**
 
@@ -294,7 +298,7 @@ Sometimes, influence and symmetry appear at the level of **equivalence classes o
 
 **Classifier Mapping**
 
-A **classifier mapping** is a mapping between state spaces that respects equivalence classes, i.e., it sends each class in \(S_1\) to a class in \(S_2\).
+A **classifier mapping** is a mapping between state spaces that respects equivalence classes, i.e., it sends each class in $S_1$ to a class in $S_2$.
 
 **Classified Fields**
 
@@ -335,10 +339,10 @@ While the Affected Systems Framework focuses on **influence and correlation**, t
 ### 5.1 Ensemble of Dynamic Systems
 
 An **ensemble** is a (finite or countable) collection of dynamic systems:
-\[
+$$
 \mathcal{E} = \{ A_1, A_2, \dots, A_n \},
-\]
-where each \(A_i = (S_i, F_i, \Theta_i)\) is a dynamic system in the FDS sense.
+$$
+where each $A_i = (S_i, F_i, \Theta_i)$ is a dynamic system in the FDS sense.
 
 Ensembles allow us to:
 
