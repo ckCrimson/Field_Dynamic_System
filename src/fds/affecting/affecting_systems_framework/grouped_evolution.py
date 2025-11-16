@@ -153,3 +153,9 @@ class AffectingGroupsEvolution(ABC, Generic[S]):
         self.dict_of_groups_of_affecting_fds.clear()
         self.affected_groups_formed = False
         self.affected_systems_formed = False
+
+    def get_states_of_systems(self):
+        dict_of_systems_states : Dict[str,State] ={}
+        for sys_id, systems in self.systems.items():
+            dict_of_systems_states[sys_id]=systems.initial_state
+        return dict_of_systems_states

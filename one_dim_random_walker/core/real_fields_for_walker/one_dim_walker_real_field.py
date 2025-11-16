@@ -1,9 +1,10 @@
 import copy
-from typing import Any, ClassVar, Optional
+from typing import Any, ClassVar, Optional, Dict
 from matplotlib import pyplot as plt
 
 
-from fds import FieldValue, Field, State
+from fds import FieldValue, Field, State, StatSpace
+from fds.affecting.affecting_systems_framework.correlated_state_space import CorrelatedStateSpace
 from fds.core.fds_field import ComposeField, TransformField
 from fds.core.fds_field.field_function import FieldFunction, S
 from fds.core.fds_field.single_field_value import SingleFieldValue
@@ -67,19 +68,30 @@ class RealFieldValue(FieldValue):
     def get_zero_field(self) -> 'RealFieldValue':
         return RealFieldValue(RealSingleFieldValue(0))
 
+    def __add__(self, other):
+        if isinstance(other, RealFieldValue):
+            return RealFieldValue(RealSingleFieldValue(other.data.value+self.data.value))
+        elif isinstance(other, float) or isinstance(other,int):
+            return RealFieldValue(RealSingleFieldValue(other+self.data.value))
+        raise Exception("Unsupported addition operator")
+    @classmethod
+    def from_value(self,value:float) -> "RealFieldValue":
+        return RealFieldValue(RealSingleFieldValue(value))
+
+
 RealFieldValue.configure(RealFieldValueNorm(),RealFieldValueAddition())
 # ------- Real Field Class --------------#
 
 # RealField.py
 
 
-class RealField(Field[IntegerState]):
+class RealField(Field[StatSpace]):
     # class-level singletons (avoid re-allocating on every instance)
     _UNIT = RealFieldValue(RealSingleFieldValue(1))
     _ZERO = RealFieldValue(RealSingleFieldValue(0))
 
     # --- Primary constructor: takes a space. This is what internal code will use.
-    def __init__(self, space: IntegerLine, current_state: Optional[IntegerState] = None,
+    def __init__(self, space: StatSpace, current_state: Optional[IntegerState] = None,
                  field_function: Optional[FieldFunction] = None):
         super().__init__(state_space=space, unit_field=self._UNIT, field_function=field_function)
         self.zero_field = self._ZERO
@@ -114,13 +126,46 @@ class RealField(Field[IntegerState]):
             rf.set_zero_field()
         return rf
 
-    def plot_field(self):
-        state_space_array = [s.state for s in self.state_space.get_all_states()]
-        field_each_state = [self.get_field(s).data.value for s in self.state_space.get_all_states()]
-        # print(state_space_array)
-        # print(field_each_state)
-        plt.scatter(state_space_array, field_each_state)
-        plt.show()
+    def plot_field(self, type_of_state_space: str = 'I'):
+        if type_of_state_space=='I':
+            state_space_array = [s.state for s in self.state_space.get_all_states()]
+            field_each_state = [self.get_field(s).data.value for s in self.state_space.get_all_states()]
+            # print(state_space_array)
+            # print(field_each_state)
+            plt.scatter(state_space_array, field_each_state)
+            plt.show()
+        elif  type_of_state_space=='C':
+            sids= self.state_space.ids_view()
+            dict_of_state_field : Dict[IntegerState,RealFieldValue] = {}
+            for ids in sids:
+                state = self.state_space.get_state_by_id(int(ids))
+                for  sys,states in state.get_all_components().items():
+                    if states.state in dict_of_state_field.keys():
+                        dict_of_state_field[states.state]=dict_of_state_field[states.state]+self.get_field(state).data.value
+                    else:
+                        dict_of_state_field[states.state] = self.get_field(state).data.value
+            x = list(dict_of_state_field.keys())
+            y = list(dict_of_state_field.values())
+
+            # 3. Create the plot
+            plt.figure(figsize=(8, 5))  # Optional: set the figure size
+
+            # Plotting the data as a line plot with markers
+            plt.scatter(x, y, marker='o', linestyle='-', color='blue')
+
+            # Add labels and title
+            plt.xlabel("Integer Line")
+            plt.ylabel("Field Value")
+            plt.title("Field Plot")
+
+            # Add a grid for better readability (optional)
+            plt.grid(True, linestyle='--', alpha=0.6)
+
+            # Display the plot
+            plt.show()
+        else:
+            print("Not implemented")
+
 
 
 # --------------- Real Field Addition --------------#

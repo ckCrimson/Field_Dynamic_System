@@ -279,3 +279,14 @@ class CorrelatedStateSpace(DiscreteFiniteStatSpace[CorrelatedState]):
         if system_state is not None:
             return cls.build_from_dict_of_states(system_state, order=order)
         raise ValueError("build_state_space_from_inputs: provide one of {states, systems, system_state}")
+
+    def __repr__(self):
+        ids = self.ids_view()
+        return_string = ""
+        for id in ids:
+            state = self.get_state_by_id(id)
+            return_string += f"{id}: {state} \n"
+        return return_string
+
+    def type_of_individual_states(self):
+        pass

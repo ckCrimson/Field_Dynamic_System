@@ -5,7 +5,9 @@ from fds import State
 
 
 
-from typing import Mapping, Iterable, Optional, Iterator, Tuple
+from typing import Mapping, Iterable, Optional, Iterator, Tuple, Dict
+
+from fds.dynamic_systems import FieldDynamicSystem
 
 
 # assuming your State is imported from fds.core.fds_state.state
@@ -47,6 +49,30 @@ class CorrelatedState(State):
         object.__setattr__(self, "_vector_cache", None)
 
     # ---- convenience API ----
+    @classmethod
+    def from_initial_states_of_systems(self,members: Dict[str,FieldDynamicSystem]):
+        initial_state :Dict[str,State] = {}
+        for sys_id,systems in members.items():
+            initial_state[sys_id] = systems.initial_state
+        return CorrelatedState(initial_state)
+
+    def get_component(self, name: str=None) -> State:
+        """
+        Return the component state for the given system name.
+
+        Example:
+            cs.get_component("sys1") → returns the State corresponding to sys1.
+
+        Raises:
+            KeyError – if the name is not part of this correlated state.
+        """
+
+        try:
+            idx = self._name_to_idx[name]
+        except KeyError:
+            raise KeyError(f"System '{name}' does not exist in this CorrelatedState "
+                           f"(available systems: {self._order})")
+        return self._states[idx]
 
     def get_order(self) -> list[str]:
         return self._order
@@ -90,3 +116,6 @@ class CorrelatedState(State):
     def __repr__(self) -> str:
         parts = ", ".join(f"{name}={st!r}" for name, st in self.items())
         return f"CorrelatedState({parts})"
+
+    def get_all_components(self) -> Dict[str, State]:
+        return {name: self._states[i] for i, name in enumerate(self._order)}

@@ -83,6 +83,5 @@ class FieldDynamicSystem(FieldStaticDynamicSystem[S], Generic[S]):
     def evolve_from_field(self):
         self.operator.apply(self.field,self.transition_list)
         self.initial_state =   (self.transition_list[-1])
-        print("Setting unit field at new state")
         self.field.set_field(self.transition_list[-1],self.field.get_unit_field())
         self.repition = True

@@ -135,4 +135,14 @@ class AffectingFDS(FieldDynamicSystem[S], ABC, Generic[S]):
         except Exception:
             pass
 
+    def evolve_from_field(self):
+        self.operator.apply(self.field, self.transition_list)
+        self.initial_state = (self.transition_list[-1])
+        self.field.set_field(self.transition_list[-1], self.field.get_unit_field())
+        correlate_state_of_next_state = self.mapping.get_system_state(self.initial_state)
+        for final_states in correlate_state_of_next_state:
+            for sys_id, systems_member in self.members.items():
+                systems_member.initial_state = final_states[sys_id]
+            self.repition = True
+
 

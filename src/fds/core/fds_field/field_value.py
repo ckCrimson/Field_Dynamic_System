@@ -134,3 +134,5 @@ class FieldValue:
             return np.array_equal(arr1, arr2)
         return np.allclose(arr1, arr2, rtol=0.0, atol=atol)
 
+
+    def get_value(self):return self.data.value

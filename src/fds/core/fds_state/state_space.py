@@ -95,6 +95,12 @@ class StatSpace(Generic[S],ABC):
         return getattr(self, "_universe_id", None)
 
 
+    def remove_state(self,s:State):
+
+        """Remove a state from this space."""
+        pass
+
+
 
 #------------Types of State Spaces -------------------#
 
@@ -255,6 +261,40 @@ class DiscreteFiniteStatSpace(StatSpace[S]):
             except Exception:
                 self._dim = 1
         return self
+
+    def remove_state(self, s: S) -> None:
+        """
+        Remove state `s` from the space.
+        - If s not present → no-op
+        - Re-index IDs to remain contiguous (0..N-1)
+        - Adjust current_state safely
+        """
+        if s not in self._state_to_id:
+            return  # nothing to do
+
+        # 1) Get ID and remove from structures
+        remove_id = self._state_to_id.pop(s)
+
+        # 2) Remove from ID→state list
+        self._id_to_state.pop(remove_id)
+
+        # 3) Rebuild the mapping for IDs > removed_id
+        #    Shift their IDs down by 1
+        for st, sid in list(self._state_to_id.items()):
+            if sid > remove_id:
+                self._state_to_id[st] = sid - 1
+
+        # 4) Fix current_state if needed
+        if self._current_state == s:
+            if self._id_to_state:
+                # choose deterministic first state
+                self._current_state = self._id_to_state[0]
+            else:
+                # No states left — degenerate space
+                self._current_state = None
+
+        # finalize (no need to recompute dim; states unchanged)
+
 
 class DiscreteInfiniteStateSpace(DiscreteSpace, StatSpace[S], ABC):
     """Define membership by rule; optionally provide an iterator."""

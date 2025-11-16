@@ -22,6 +22,7 @@ class Field(Generic[S]):
         self.field_function = field_function
         self._values: dict[S, FieldValue] = {}
         self.set_empty_field()
+        self._zero_value = self._unit.get_zero_field()
 
     def get_field(self, state: S) :
         """Return the FieldValue at the given state."""
@@ -41,14 +42,15 @@ class Field(Generic[S]):
         self._values[state] = value
 
     def set_empty_field(self) -> None:
-        self._values.clear()
-        for s in self.state_space.get_all_states():
-            self._values[s] = self._unit
+        ids = self.state_space.ids_view()
+        for id in ids:
+            self.set_field(self.state_space.get_state_by_id(int(id)), self._unit)
         # Only store non-unit entries if needed; unit assumed default
 
     def set_zero_field(self):
-        for s in self.state_space.get_all_states():
-            self.set_field(s, self.get_zero_field())
+        ids = self.state_space.ids_view()
+        for id in ids:
+            self.set_field(self.state_space.get_state_by_id(int(id)), self._zero_value)
 
     def add_field(self, other: 'Field[S]') -> None:
         """
@@ -88,3 +90,19 @@ class Field(Generic[S]):
     def set_unit_field_at_state(self,inp_state:State):
         self.set_zero_field()
         self.set_field(inp_state,self.get_unit_field())
+
+    def set_constant_field_at_all_except_input(self, inp_state:State, inp_constant_field :FieldValue, inp_special_field :FieldValue):
+        ids = self.state_space.ids_view()
+        no_check =False
+        for id in ids:
+            state = self.state_space.get_state_by_id(int(id))
+            if not no_check and state == inp_state:
+                self.set_field(state,inp_special_field)
+                no_check = True
+                continue
+            self.set_field(state,inp_constant_field)
+
+    def set_zero_everywhere_except_unit_at_inp_state(self, inp_state:State):
+        un =self._unit
+        zer = self._zero_value
+        self.set_constant_field_at_all_except_input(inp_state,zer, un)

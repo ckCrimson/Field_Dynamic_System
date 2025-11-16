@@ -26,7 +26,6 @@ class AffectedSystemsOperator(Operator, ABC):
         history.append(next_state)
         system_states_set = self.mapping.get_system_state(next_state)
         system_states = self.pick_state_from_set(system_states_set)
-        print(system_states)
         for system_id,systems in self.affecting_group.items():
             system_state = system_states[system_id]
             self.affecting_group[system_id].initial_state = system_state

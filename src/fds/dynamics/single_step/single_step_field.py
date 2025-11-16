@@ -13,9 +13,9 @@ class SingleStepField(Generic[S]):
     """
     def __init__(
         self,
-        kernel: Kernel[S],
-        reachable: "Reachable[S]",
-        kernelFieldComposition: Composition,
+        kernel: Kernel[S]=None,
+        reachable: "Reachable[S]"=None,
+        kernelFieldComposition: Composition=None,
         postComposition: Optional[Composition] = None,  # optional: how to combine with Q
     ):
         self.kernel = kernel
@@ -39,7 +39,7 @@ class SingleStepField(Generic[S]):
         """
         # 1) reachable set/space
         reachable_space = self.reachable.get_reachable(current_state)
-        states_iter = reachable_space.get_all_states()
+        states_iter = reachable_space.ids_view()
 
         # 2) initialize the output field over the same space, empty/unit by default
         new_field_class = type(system_field)
@@ -48,8 +48,9 @@ class SingleStepField(Generic[S]):
         #new_field.set_zero_field()
         #new_field.set_field(current_state,system_field.get_unit_field())
         # 3) per-state composition (kernel ⊗ system) and optional shaping (⊗ Q)
-        for s in states_iter:
+        for sid in states_iter:
             #print("H")
+            s=reachable_space.get_state_by_id(int(sid))
             k_val = self.kernel.get_kernel_value(s, current_state)     # FieldValue / SingleFieldValue
             if global_field is not None:
                 f_val = global_field.get_field(s)                      # FieldValue / SingleFieldValue
