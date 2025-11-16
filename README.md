@@ -4,7 +4,7 @@
 
 This repository contains a Python implementation of the **Field Dynamic Systems (FDS)** framework.
 
-This README presents the **theoretical foundation only**, independent of implementation details, so the conceptual structure stands clearly on its own.
+This README presents the **theoretical foundation only**, independent of implementation details.
 
 ---
 
@@ -25,427 +25,312 @@ This README presents the **theoretical foundation only**, independent of impleme
 
 ---
 
-## 1. Motivation
+# 1. Motivation
 
 Many systems in nature and engineering evolve over time:
 
 - a particle moving on a lattice,
-- a sample mean changing as more data points are added,
-- a body cooling toward its environment,
-- multiple systems interacting under conservation laws.
+- a sample mean changing with more observations,
+- cooling of a warm body,
+- interacting subsystems under joint constraints.
 
-Traditional approaches (differential equations, Markov chains, stochastic processes) handle specific patterns of evolution but often struggle to:
+Classical tools (differential equations, Markov chains) handle special cases, but often fail to:
 
-- unify deterministic and probabilistic evolution,
-- incorporate state-dependent or time-dependent behavior cleanly,
-- handle complex correlation between systems,
-- express evolution through flexible algebraic structures (fields, transforms, compositions).
+- treat deterministic/probabilistic behavior in a unified way,
+- handle state-dependent or time-dependent transitions cleanly,
+- express correlations across multiple systems,
+- encode field-based transformations and compositions.
 
-**Field Dynamic Systems (FDS)** generalize these ideas by introducing:
+**Field Dynamic Systems (FDS)** unify these concepts using:
 
-- **fields** attached to states or transitions,
-- **operators** that use structured transforms and compositions,
-- a **path-integral viewpoint** implemented via a recurrence rather than explicit path enumeration,
-- extensions to **affected systems** and **ensembles**.
-
-This framework is designed to be **modular**, **extensible**, and **theoretically clean**.
-
----
-
-## 2. High-Level Overview
-
-At a high level, an FDS consists of:
-
-- a **state space** $S$,
-- one or more **fields** $F$ defined on states or transitions,
-- **transforms** (internal / external) that modify field values,
-- **compositions** (internal / external) for combining field values,
-- **operators** $\Theta$ that evolve the system,
-- a **multi-step recurrence** that generalizes path-integral evolution.
-
-Built on top of this are:
-
-1. the **Affected Systems Framework** — directional influence between systems,
-2. the **Ensemble Framework** — collections of systems studied jointly.
+- fields on states or transitions,
+- transforms,
+- compositions,
+- generalized chain-rule based multi-step evolution,
+- affected-system relationships,
+- and ensembles.
 
 ---
 
-## 3. Core FDS Concepts
+# 2. High-Level Overview
 
-### 3.1 State and State Space
+An FDS consists of:
 
-**State**  
-A **state** is a configuration of a system at a given instant. It is the basic unit of description.
+- a **state space** \( S \),
+- one or more **fields** \( F \),
+- **transforms** \( Z^p, Z^t, Z^c \),
+- **compositions** \( \cdot \) (internal) and \( + \) (external),
+- **operators** controlling evolution,
+- a **multi-step recurrence** analogous to a path integral.
 
-Examples (conceptual):
+Two major extensions:
 
-- a position on a 1D or 2D lattice,
-- a pair $(x, \kappa)$, where $\kappa$ is a “bias” or internal parameter,
+1. **Affected Systems Framework** — directional influence between systems  
+2. **Ensemble Framework** — collections of systems for comparison & joint analysis
+
+---
+
+# 3. Core FDS Concepts
+
+## 3.1 State and State Space
+
+A **state** is a single configuration of a system.
+
+Examples:
+
+- a lattice point,
+- a pair \( (x, \kappa) \),
 - a histogram / count vector,
-- a macroscopic variable like temperature or sample mean.
+- temperature in a thermodynamic model.
 
-**State Space**  
-The **state space** $S$ is the set of all possible states.
+The **state space** \( S \) determines:
 
-It determines:
+- all valid states,
+- allowable transitions,
+- reachable and reaching sets.
 
-- which states are allowed,
-- which transitions are allowed,
-- how reachable / reaching sets are formed,
-- the domain on which fields are defined.
+**Reachable states** (from \( s_0 \) in \( l \) steps):  
+states that can be reached via valid transitions.
 
-**Reachable States**  
-Given an initial state $s_0$, the **reachable states** at step $\ell$ are states that can be reached in $\ell$ steps from $s_0$.
-
-**Reaching States**  
-For a given state $s'$, the **reaching states** are those $s$ such that a single-step transition $s \to s'$ is allowed.
-
-These concepts are central to the multi-step recurrence.
+**Reaching states** (for \( s' \)):  
+states \( s \) such that a single-step transition \( s \to s' \) exists.
 
 ---
 
-### 3.2 Fields and Field Values
+## 3.2 Fields and Field Values
 
-A **field** associates a value to a state, or to a transition between states:
+A **field** assigns values to states or transitions:
 
 $$
 F : S \to \mathcal{V}
 \qquad\text{or}\qquad
-F : S \times S \to \mathcal{V},
+F : S \times S \to \mathcal{V}.
 $$
-
-where $\mathcal{V}$ may be:
-
-- real numbers,
-- complex numbers,
-- vectors,
-- or any structured value space.
 
 Field values may represent:
 
 - weights or preferences,
 - amplitudes,
-- potential-like quantities,
-- kernel values controlling transitions,
+- potentials / kernels,
 - contributions to multi-step evolution.
 
-**Field Value**
+**Field Values**
 
-- $F(s)$ is the field at state $s$.
-- $F(s' : s)$ is the field associated to the transition $s \to s'$.
-
-Fields are the primary carriers of information that drive the evolution in FDS.
+- \( F(s) \) — value at state \( s \)
+- \( F(s' : s) \) — value for transition \( s \to s' \)
 
 ---
 
-### 3.3 Kernels, Operators, and Single-Step Evolution
+## 3.3 Kernels, Operators, and Single-Step Evolution
 
-A **kernel** in FDS is simply a field on transitions that expresses the “raw tendency” or contribution of moving from one state to another:
+A **kernel** is simply the transition field:
 
 $$
 K(s \to s') = F_t(s' : s).
 $$
 
-This is not required to be a probability; it is a **contribution** that will later be transformed and combined.
+### Transforms
 
-#### Transforms
+- **\( Z^p \)** — internal transform applied to previous-step fields  
+- **\( Z^t \)** — external transform applied to single-step fields  
+- **\( Z^c \)** — cleanup transform applied after accumulation  
 
-FDS distinguishes three conceptual transforms:
+### Compositions
 
-- **$Z^p$ (internal transform)**  
-  Applied to **previous-step field values** $F^{\,l-1}(s : s_0)$.
-- **$Z^t$ (external transform)**  
-  Applied to **single-step field values** $F_t(s' : s)$.
-- **$Z^c$ (cleanup / final transform)**  
-  Applied to the accumulated field $F'^{\,l}(s' : s_0)$ to produce $F^{\,l}(s' : s_0)$.
+- **Internal composition**: \( a \cdot b \)  
+  (combines transformed previous and single-step contributions)
 
-These transforms may encode normalization, biasing, scaling, damping, stability adjustments, or other problem-specific structure.
+- **External composition**: \( a + b \)  
+  (accumulates contributions from different reaching states)
 
-#### Compositions
-
-Two kinds of compositions are used:
-
-- **Internal composition** $*$  
-  Combines transformed previous-step fields and transformed single-step fields.
-
-- **External composition** $+$  
-  Accumulates contributions from different reaching states $s$ into a single $F'^{\,l}(s' : s_0)$.
-
-The combination of transforms and compositions defines the **single-step evolution rule** for contributions.
+No `*` is used — GitHub formatting-safe.
 
 ---
 
-### 3.4 Paths, Contributions, and Multi-Step Recurrence
+## 3.4 Paths, Contributions, and Multi-Step Recurrence
 
-#### Path
+### Path
 
-A **path** is an ordered sequence of states:
-
-$$
-\pi = (s_0, s_1, \dots, s_\ell).
-$$
-
-Each edge $s_{k-1} \to s_k$ corresponds to a single-step transition and has an associated field contribution.
-
-#### Path Contribution
-
-Instead of working directly with probabilities, FDS works with **contributions** built from:
-
-- the single-step field $F_t(s_{k} : s_{k-1})$,
-- internal / external transforms ($Z^p$, $Z^t$),
-- and internal composition $*$.
-
-A path’s total contribution is the structured combination of its segment contributions.
-
-#### Path Integral (Conceptual View)
-
-Conceptually, the total contribution (or weight) supporting state $s_\ell$ after $\ell$ steps from $s_0$ is a sum over all paths:
+A **path** is:
 
 $$
-F^{\,\ell}(s_\ell : s_0)
+\pi = (s_0, s_1, \dots, s_l).
+$$
+
+### Path Contribution
+
+Each transition contributes via:
+
+- single-step field \( F_t \)
+- transforms \( Z^p, Z^t \)
+- internal composition \( \cdot \)
+
+A path's total contribution is the structured combination of its transitions.
+
+### Conceptual Path Integral
+
+$$
+F^{l}(s_l : s_0)
 =
-\sum_{\pi : s_0 \to s_\ell}
+\sum_{\pi : s_0 \to s_l}
 \text{Contribution}(\pi).
 $$
 
-This is analogous to a path integral or sum-over-histories picture.
+### Why We Do Not Enumerate Paths
 
-#### Why FDS Does Not Enumerate Paths
+Path enumeration is exponential.
 
-Explicitly enumerating all paths is usually exponential in the number of steps.
+FDS instead uses a **generalized chain-rule recurrence** using reaching states.
 
-Instead, FDS uses a **generalized chain-rule style recurrence** that operates only on **reaching states** and **multi-step fields**.
+---
 
-#### General Multi-Step Recurrence
+## 3.4.1 **General Multi-Step Recurrence (GitHub-Safe)**
 
-For each step $l$ and for each state $s'$:
+For each step \( l \), for each state \( s' \):
 
-1. For each **reaching state** $s$ of $s'$ (i.e. each $s$ with a valid transition $s \to s'$), update the intermediate field:
+#### **Accumulation step**
 
 $$
 F'^{l}(s' : s_0)
 =
 F^{l}(s' : s_0)
-$+$
++
 Z^{t}\left( F_{t}(s' : s) \right)
-$*$
+\cdot
 Z^{p}\left( F^{l-1}(s : s_0) \right)
 $$
 
-2. After aggregating contributions from all reaching states $s$, finalize the $l$-step field at $s'$:
+for every reaching state \( s \).
 
-   $$
-   F^{\,l}(s' : s_0)
-   \leftarrow
-   Z^c\!\big[F'^{\,l}(s' : s_0)\big].
-   $$
-
-This recurrence is the FDS analogue of a **chain rule** for multi-step evolution:
-
-- $Z^p$ prepares the previous-step field at $s$,
-- $Z^t$ prepares the single-step field from $s$ to $s'$,
-- $*$ combines them into a contribution for paths passing through $s$,
-- $+$ sums contributions from all such $s$,
-- $Z^c$ cleans up / normalizes the resulting $l$-step field.
-
-Thus, FDS realizes a path-integral style evolution **without** enumerating paths explicitly.
-
----
-
-### 3.5 Dynamic System
-
-A **Dynamic System** in FDS is defined by:
-
-- a state space $S$,
-- a collection of fields over states and/or transitions (e.g. $F, F_t, \dots$),
-- a set of transforms $(Z^p, Z^t, Z^c)$,
-- compositions $(*, +)$,
-- and one or more evolution operators $\Theta$ that implement the multi-step recurrence.
-
-Conceptually, a dynamic system is the pairing of:
-
-- a **structural layer** (state space + fields), and
-- an **evolution layer** (transforms + compositions + operator).
-
-Examples (conceptual only):
-
-- A biased random walker where fields encode directional preference and magnitude.
-- A dice-based system where fields count how many ways a mean or configuration can occur.
-- A thermodynamic system whose macroscopic evolution is induced from a finer “microscopic” system via mappings.
-
-The **Affected Systems** and **Ensemble** frameworks build upon this notion of dynamic system.
-
----
-
-## 4. Affected Systems Framework
-
-The **Affected Systems Framework** captures situations where one system’s behavior depends on another system (or multiple systems).
-
-Consider:
-
-- Affecting system: $A_1 = (S_1, F_1, \Theta_1)$  
-- Affected system: $A_2 = (S_2, F_2, \Theta_2)$  
-
-Influence can appear as:
-
-- field values in $A_2$ depending on states / fields in $A_1$,
-- allowable transitions in $A_2$ depending on $A_1$,
-- joint constraints (e.g. conservation) linking both systems,
-- coupled evolution rules.
-
-### 4.1 Systems and Joint Fields
-
-A **joint field** defines combined contributions or preferences for pairs of states:
+#### **Finalize step**
 
 $$
-F_{12}(s_1, s_2 : s_{10}, s_{20}),
+F^{l}(s' : s_0)
+=
+Z^{c}\left( F'^{l}(s' : s_0) \right)
 $$
 
-or for joint transitions.
+This recurrence **is** multi-step evolution in FDS:
 
-- If it factorizes into independent parts, the systems are effectively uncorrelated.
-- If not, the systems are correlated or coupled.
-
-In the affected framework, we especially care about **directionality**: which system is affecting and which is affected.
+- \( Z^p \): prepares previous-step field  
+- \( Z^t \): prepares single-step field  
+- \( \cdot \): internal composition  
+- \( + \): external accumulation  
+- \( Z^c \): cleanup / normalization  
 
 ---
 
-### 4.2 State Space Mappings
+## 3.5 Dynamic System
 
-To express how an affecting system relates to an affected system, we introduce a **state space mapping**:
+A **Dynamic System** in FDS consists of:
 
-$$
-M_{12} : S_1 \to \mathcal{P}(S_2),
-$$
+- a state space \( S \),
+- fields \( F \),
+- transforms \( Z^p, Z^t, Z^c \),
+- compositions \( \cdot \) and \( + \),
+- evolution operators implementing the recurrence.
 
-where $\mathcal{P}(S_2)$ is the power set of $S_2$.
+Examples:
 
-This mapping assigns to each $s_1 \in S_1$ a subset of $S_2$ (a region, block, or fiber) which is “under the influence” of $s_1$.
-
-An inverse-like relation:
-
-$$
-M_{12}^{-1}(s_2) = \{ s_1 \in S_1 \mid s_2 \in M_{12}(s_1) \},
-$$
-
-identifies which states in $S_1$ affect a given $s_2$.
-
-These mappings:
-
-- define **affected reachable / reaching sets** across systems,
-- constrain evolution in the affected system,
-- encode structural relationships such as conservation or shared invariants.
+- biased random walkers,  
+- sample-mean / dice systems,  
+- thermodynamic or coarse-grained systems,  
+- mapped or correlated systems.
 
 ---
 
-### 4.3 Classed State Spaces and Classified Fields
+# 4. Affected Systems Framework
 
-Sometimes, influence and symmetry live at the level of **equivalence classes of states** rather than individual states.
+Models **directional influence**:
 
-- Define an equivalence relation $\sim$ on $S$, e.g. “same energy”, “same total count”.
-- Partition $S$ into **equivalence classes** $C_1, C_2, \dots$.
+- Affecting system: \( A_1 = (S_1, F_1, \Theta_1) \)
+- Affected system:  \( A_2 = (S_2, F_2, \Theta_2) \)
 
-The resulting **classed state space** treats each class as a macro-state.
+Influence appears through:
 
-A **classifier mapping** between systems respects these classes, mapping classes in $S_1$ to classes in $S_2$.
+- modified fields,
+- restricted transitions,
+- joint constraints,
+- directional mappings.
 
-A **classified field** aggregates field values over each class (for example, summing or averaging contributions). This reveals:
-
-- symmetry at the class level,
-- relationships reminiscent of “symmetry $\leftrightarrow$ conserved quantity”.
-
-Classed state spaces are natural tools for expressing **thermodynamic-like** or **coarse-grained** views within the FDS framework.
-
----
-
-### 4.4 Grouped Evolution
-
-Real systems often involve **groups** of states or subsystems that evolve together.
-
-In the affected framework we can:
-
-- define groups (blocks) of states or subsystems,
-- define **grouped operators** that evolve entire groups coherently,
-- track **grouped evolution**, where each step advances all affected subsystems under joint rules.
-
-This is useful when:
-
-- modeling multiple interacting subsystems with shared constraints,
-- evolving correlated walkers,
-- expressing coupled thermodynamic bodies, etc.
-
-The Affected Systems Framework thus provides a structured way to talk about **who affects whom**, and **how that influence propagates through the fields and evolution operators**.
-
----
-
-## 5. Ensemble Framework
-
-While the affected framework focuses on directional influence, the **Ensemble Framework** focuses on **collections** of dynamic systems studied together.
-
-An **ensemble** is:
+### Joint Field
 
 $$
-\mathcal{E} = \{ A_1, A_2, \dots, A_n \},
+F_{12}(s_1, s_2 : s_{10}, s_{20})
 $$
 
-where each $A_i$ is a valid dynamic system in the FDS sense.
+captures combined influence or correlation.
 
-Ensembles allow us to:
+### State Space Mapping
 
-- compare systems side-by-side,
-- simulate multiple systems in parallel,
-- study fine vs. coarse models of the same phenomenon,
-- detect symmetries or approximate equivalences between systems.
+$$
+M_{12}: S_1 \to \mathcal{P}(S_2)
+$$
 
----
+assigns regions in \( S_2 \) under the influence of states in \( S_1 \).
 
-### 5.1 Ensemble Operators
+Inverse mapping:
 
-An **ensemble operator** acts on multiple systems in the ensemble:
-
-- **Synchronous**: evolve all systems by one step.
-- **Asynchronous**: evolve a subset of systems according to a schedule or condition.
-- **Coupled**: evolution rules that depend on ensemble-wide quantities or statistics.
-
-Ensemble operators are natural when exploring:
-
-- how different parameter sets behave,
-- how multiple candidate models evolve,
-- how systems might converge or diverge in behavior.
+$$
+M_{12}^{-1}(s_2) = \{ s_1 \mid s_2 \in M_{12}(s_1) \}
+$$
 
 ---
 
-### 5.2 Mapping Register and System Relationships
+### Classed State Spaces
 
-Within an ensemble, we often need to know **how systems correspond to each other**.
+Partition \( S \) into equivalence classes:
 
-A **mapping register** conceptually stores:
+- same energy,  
+- same count sum,  
+- same conserved quantity.
 
-- mappings between state spaces,
-- correspondences between observables,
-- rules for mapping or transforming fields,
-- metrics or distances between systems.
+A **classified field** aggregates fields over each class, revealing symmetries.
 
-This enables:
+### Grouped Evolution
 
-- defining **distances** between systems,
-- analyzing **path evolution symmetry** (do two systems follow the same evolution up to a mapping?),
-- capturing **classification-based symmetry** across multiple systems.
-
-The ensemble framework, together with mapping registers and metrics, turns FDS into a tool for **model comparison, symmetry detection, and structural analysis** of dynamic systems.
+Subsystems or state blocks may evolve jointly under shared influence.
 
 ---
 
-## 6. Conceptual Diagram
+# 5. Ensemble Framework
 
-Below is a high-level conceptual diagram of the FDS framework, emphasizing the role of **Affected Systems** and **Ensembles**.
+An **ensemble** is a collection:
 
-> GitHub supports Mermaid diagrams natively.
+$$
+\mathcal{E} = \{ A_1, A_2, \dots, A_n \}.
+$$
+
+Used for:
+
+- comparing systems,
+- evolving multiple systems in parallel,
+- multi-scale modeling,
+- exploring symmetry or divergence.
+
+### Ensemble Operators
+
+- synchronous evolution  
+- asynchronous evolution  
+- ensemble-conditioned evolution  
+
+### Mapping Register
+
+Stores:
+
+- state space mappings,
+- field correspondences,
+- system distances,
+- symmetry relationships.
+
+---
+
+# 6. Conceptual Diagram
 
 ```mermaid
 graph TD
 
-  %% Core layer
+  %% Core
   StateSpace["State Space"]
   State["State"]
   Field["Field"]
@@ -456,7 +341,7 @@ graph TD
   PathIntegral["Path Integral (Conceptual)"]
   DynamicSystem["Dynamic System"]
 
-  %% Affected systems layer
+  %% Affected systems
   AffectedFramework["Affected Systems Framework"]
   JointField["Joint / Combined Field"]
   Mapping["State Space Mapping"]
@@ -464,7 +349,7 @@ graph TD
   ClassifiedField["Classified Field"]
   GroupedEvolution["Grouped Evolution"]
 
-  %% Ensemble layer
+  %% Ensemble
   Ensemble["Ensemble of Systems"]
   EnsembleOp["Ensemble Operator"]
   MappingRegister["Mapping Register"]
@@ -482,7 +367,7 @@ graph TD
   Field --> DynamicSystem
   Operator --> DynamicSystem
 
-  %% Affected systems relationships
+  %% Affected relationships
   DynamicSystem --> AffectedFramework
   AffectedFramework --> JointField
   AffectedFramework --> Mapping
