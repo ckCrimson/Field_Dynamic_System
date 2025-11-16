@@ -30,8 +30,8 @@ class FieldDynamicSystem(FieldStaticDynamicSystem[S], Generic[S]):
                  operator: Operator[S], transition_list: list[S],state_space: StatSpace[S] = None,
                  reaching: Reaching[S]=None,
                  system_global_field: Optional[Field[S]] = None, own_produced_field: Optional[Field[S]] = None,
-                 build_from_reachable = False,within_state_space = False) -> None:
-        super().__init__(initial_state,state_space, reachable, reaching, field,system_global_field,own_produced_field)
+                 build_from_reachable = False,within_state_space = False, multi_step_reaching: MultiStepReaching=None) -> None:
+        super().__init__(initial_state,state_space, reachable, field,reaching,multi_step_reaching,system_global_field,own_produced_field)
         self.multi_step_field = multi_step_field
        # self.pdf_field = pdf_field
         self.operator = operator
