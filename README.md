@@ -414,8 +414,6 @@ The ensemble framework, together with mappings and distances, turns FDS into a *
 
 Below is a high-level conceptual diagram of the FDS framework, emphasizing the role of **Affected Systems** and **Ensembles**.
 
-> Note: GitHub supports Mermaid diagrams natively.  
-> The `click` directives are optional; they can be wired to documentation sections or files.
 
 ```mermaid
 graph TD
