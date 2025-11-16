@@ -26,3 +26,5 @@ venv/
 *.zip
 *.rar
 *.7z
+
+*inspect_inheritance.py
