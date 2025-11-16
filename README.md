@@ -147,27 +147,27 @@ No `*` is used — GitHub formatting-safe.
 
 ---
 
-## 3.4 Paths, Contributions, and Multi-Step Recurrence
+### 3.4 Paths, Contributions, and Multi-Step Recurrence
 
-### Path
-
-A **path** is:
+#### Path
+A **path** is a sequence of states:
 
 $$
-\pi = (s_0, s_1, \dots, s_l).
+\pi = (s_0, s_1, \ldots, s_l).
 $$
 
-### Path Contribution
+#### Path Contribution
+Each transition contributes through:
 
-Each transition contributes via:
+- the single-step field \( F_t \),
+- transforms \( Z^p \) and \( Z^t \),
+- the internal composition \( \cdot \).
 
-- single-step field \( F_t \)
-- transforms \( Z^p, Z^t \)
-- internal composition \( \cdot \)
+The total contribution of a path is the structured combination of its transition contributions.
 
-A path's total contribution is the structured combination of its transitions.
+#### Conceptual Path Integral
 
-### Conceptual Path Integral
+The multi-step field at step \( l \) is conceptually the sum of contributions of all paths:
 
 $$
 F^{l}(s_l : s_0)
@@ -176,49 +176,48 @@ F^{l}(s_l : s_0)
 \text{Contribution}(\pi).
 $$
 
-### Why We Do Not Enumerate Paths
+#### Why We Do Not Enumerate Paths
+Enumerating all paths becomes exponentially large.
 
-Path enumeration is exponential.
-
-FDS instead uses a **generalized chain-rule recurrence** using reaching states.
+FDS avoids this by using a **generalized chain-rule recurrence** over *reaching states*.
 
 ---
 
-## 3.4.1 **General Multi-Step Recurrence (GitHub-Safe)**
+### 3.4.1 General Multi-Step Recurrence (GitHub-Safe)
 
-For each step \( l \), for each state \( s' \):
+For each step \( l \), and each state \( s' \):
 
-#### **Accumulation step**
+#### Accumulation Step
 
 $$
 F'^{l}(s' : s_0)
 =
 F^{l}(s' : s_0)
 +
-Z^{t}\left( F_{t}(s' : s) \right)
+Z^{t}\!\left( F_{t}(s' : s) \right)
 \cdot
-Z^{p}\left( F^{l-1}(s : s_0) \right)
+Z^{p}\!\left( F^{l-1}(s : s_0) \right),
 $$
 
-for every reaching state \( s \).
+for every reaching state \( s \) such that a transition \( s \to s' \) exists.
 
-#### **Finalize step**
+#### Finalize Step
 
 $$
 F^{l}(s' : s_0)
 =
-Z^{c}\left( F'^{l}(s' : s_0) \right)
+Z^{c}\!\left( F'^{l}(s' : s_0) \right).
 $$
 
-This recurrence **is** multi-step evolution in FDS:
+#### Interpretation
 
-- \( Z^p \): prepares previous-step field  
-- \( Z^t \): prepares single-step field  
-- \( \cdot \): internal composition  
-- \( + \): external accumulation  
-- \( Z^c \): cleanup / normalization  
+- \( Z^p \) — internal transform applied to the previous layer  
+- \( Z^t \) — external transform applied to the single-step field  
+- \( \cdot \) — internal composition  
+- \( + \) — external accumulation  
+- \( Z^c \) — cleanup / normalization  
 
----
+This recurrence *is* multi-step evolution in the FDS framework.
 
 ## 3.5 Dynamic System
 
