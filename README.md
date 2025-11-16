@@ -15,7 +15,7 @@ This README presents the **theoretical foundation only**, independent of impleme
 - [3. Core FDS Concepts](#3-core-fds-concepts)
   - [3.1 State and State Space](#31-state-and-state-space)
   - [3.2 Fields and Field Values](#32-fields-and-field-values)
-  - [3.3 Kernels, Operators, and Single-Step Evolution](#33-kernels-operators-and-single-step-evolution)
+  - [3.3 Kernels, Transforms, and Single-Step Evolution](#33-kernels-transforms-and-single-step-evolution)
   - [3.4 Paths, Contributions, and Multi-Step Recurrence](#34-paths-contributions-and-multi-step-recurrence)
   - [3.5 Dynamic System](#35-dynamic-system)
 - [4. Affected Systems Framework](#4-affected-systems-framework)
@@ -36,19 +36,18 @@ Many systems in nature and engineering evolve over time:
 
 Classical tools (differential equations, Markov chains) handle special cases, but often fail to:
 
-- treat deterministic/probabilistic behavior in a unified way,
-- handle state-dependent or time-dependent transitions cleanly,
-- express correlations across multiple systems,
-- encode field-based transformations and compositions.
+- unify deterministic and probabilistic behavior,
+- handle state-dependent transitions cleanly,
+- express correlations between systems,
+- describe field-based transformations and multi-step contributions.
 
-**Field Dynamic Systems (FDS)** unify these concepts using:
+**Field Dynamic Systems (FDS)** unify these ideas using:
 
-- fields on states or transitions,
-- transforms,
-- compositions,
-- generalized chain-rule based multi-step evolution,
+- fields on states and transitions,
+- transforms and compositions,
+- generalized multi-step evolution,
 - affected-system relationships,
-- and ensembles.
+- ensemble-level structure.
 
 ---
 
@@ -59,14 +58,14 @@ An FDS consists of:
 - a **state space** \( S \),
 - one or more **fields** \( F \),
 - **transforms** \( Z^p, Z^t, Z^c \),
-- **compositions** \( \cdot \) (internal) and \( + \) (external),
-- **operators** controlling evolution,
+- **compositions** \( \cdot \) (internal), \( + \) (external),
+- **operators** governing single-step updates,
 - a **multi-step recurrence** analogous to a path integral.
 
 Two major extensions:
 
 1. **Affected Systems Framework** — directional influence between systems  
-2. **Ensemble Framework** — collections of systems for comparison & joint analysis
+2. **Ensemble Framework** — collections of systems for comparison and joint analysis
 
 ---
 
@@ -78,22 +77,17 @@ A **state** is a single configuration of a system.
 
 Examples:
 
-- a lattice point,
+- a lattice location,
 - a pair \( (x, \kappa) \),
-- a histogram / count vector,
+- a histogram or frequency vector,
 - temperature in a thermodynamic model.
 
 The **state space** \( S \) determines:
 
 - all valid states,
 - allowable transitions,
-- reachable and reaching sets.
-
-**Reachable states** (from \( s_0 \) in \( l \) steps):  
-states that can be reached via valid transitions.
-
-**Reaching states** (for \( s' \)):  
-states \( s \) such that a single-step transition \( s \to s' \) exists.
+- reachable states,
+- reaching states (states that can transition into a given state).
 
 ---
 
@@ -101,211 +95,170 @@ states \( s \) such that a single-step transition \( s \to s' \) exists.
 
 A **field** assigns values to states or transitions:
 
-$$
-F : S \to \mathcal{V}
-\qquad\text{or}\qquad
-F : S \times S \to \mathcal{V}.
-$$
+$$ F : S \to \mathcal{V} $$
 
-Field values may represent:
+or
 
-- weights or preferences,
+$$ F : S \times S \to \mathcal{V}. $$
+
+Field values represent:
+
+- weights,
 - amplitudes,
-- potentials / kernels,
-- contributions to multi-step evolution.
+- potentials,
+- kernel-like contributions.
 
 **Field Values**
 
-- \( F(s) \) — value at state \( s \)
-- \( F(s' : s) \) — value for transition \( s \to s' \)
+- \( F(s) \) — field at state  
+- \( F(s' : s) \) — field for transition \( s \to s' \)
 
 ---
 
-## 3.3 Kernels, Operators, and Single-Step Evolution
+## 3.3 Kernels, Transforms, and Single-Step Evolution
 
-A **kernel** is simply the transition field:
+A **kernel** is the transition field:
 
-$$
-K(s \to s') = F_t(s' : s).
-$$
+$$ K(s \to s') = F_t(s' : s). $$
 
 ### Transforms
 
-- **\( Z^p \)** — internal transform applied to previous-step fields  
-- **\( Z^t \)** — external transform applied to single-step fields  
-- **\( Z^c \)** — cleanup transform applied after accumulation  
+- \( Z^p \) — internal transform (applied to previous-step fields)  
+- \( Z^t \) — external transform (applied to single-step fields)  
+- \( Z^c \) — cleanup/normalization after accumulation  
 
 ### Compositions
 
-- **Internal composition**: \( a \cdot b \)  
-  (combines transformed previous and single-step contributions)
+- **Internal composition:** \( a \cdot b \)  
+- **External accumulation:** \( a + b \)  
 
-- **External composition**: \( a + b \)  
-  (accumulates contributions from different reaching states)
-
-No `*` is used — GitHub formatting-safe.
+These govern how contributions combine during evolution.
 
 ---
 
-### 3.4 Paths, Contributions, and Multi-Step Recurrence
+## 3.4 Paths, Contributions, and Multi-Step Recurrence
 
-#### Path
-A **path** is a sequence of states:
+### Path
+A **path** is:
 
-$$
-\pi = (s_0, s_1, \ldots, s_l).
-$$
+$$ \pi = (s_0, s_1, \ldots, s_l). $$
 
-#### Path Contribution
+### Path Contribution
+
 Each transition contributes through:
 
 - the single-step field \( F_t \),
-- transforms \( Z^p \) and \( Z^t \),
-- the internal composition \( \cdot \).
+- transforms \( Z^p \), \( Z^t \),
+- internal composition \( \cdot \).
 
-The total contribution of a path is the structured combination of its transition contributions.
+The total contribution of a path is the structured combination of its transitions.
 
-#### Conceptual Path Integral
+### Conceptual Path Integral
 
-The multi-step field at step \( l \) is conceptually the sum of contributions of all paths:
+$$ F^{l}(s_l : s_0) = \sum_{\pi : s_0 \to s_l} \text{Contribution}(\pi) $$
 
-$$
-F^{l}(s_l : s_0)
-=
-\sum_{\pi : s_0 \to s_l}
-\text{Contribution}(\pi).
-$$
+### Why Not Enumerate Paths
+Path enumeration grows exponentially.
 
-#### Why We Do Not Enumerate Paths
-Enumerating all paths becomes exponentially large.
-
-FDS avoids this by using a **generalized chain-rule recurrence** over *reaching states*.
+FDS uses a **generalized chain-rule recurrence** over *reaching states* instead.
 
 ---
 
-### 3.4.1 General Multi-Step Recurrence (GitHub-Safe)
+## 3.4.1 Multi-Step Recurrence (GitHub-Safe)
 
 For each step \( l \), and each state \( s' \):
 
-#### Accumulation Step
+### Accumulation Step
 
-$$
-F'^{l}(s' : s_0)
-=
-F^{l}(s' : s_0)
-+
-Z^{t}\!\left( F_{t}(s' : s) \right)
-\cdot
-Z^{p}\!\left( F^{l-1}(s : s_0) \right),
-$$
+$$ F'^{l}(s' : s_0) = F^{l}(s' : s_0) + Z^{t}(F_t(s' : s)) \cdot Z^{p}(F^{l-1}(s : s_0)) $$
 
-for every reaching state \( s \) such that a transition \( s \to s' \) exists.
+(where the term is applied for every reaching state \( s \))
 
-#### Finalize Step
+### Finalize Step
 
-$$
-F^{l}(s' : s_0)
-=
-Z^{c}\!\left( F'^{l}(s' : s_0) \right).
-$$
+$$ F^{l}(s' : s_0) = Z^{c}(F'^{l}(s' : s_0)) $$
 
-#### Interpretation
+### Interpretation
 
-- \( Z^p \) — internal transform applied to the previous layer  
-- \( Z^t \) — external transform applied to the single-step field  
-- \( \cdot \) — internal composition  
-- \( + \) — external accumulation  
-- \( Z^c \) — cleanup / normalization  
+- \( Z^p \): prepares previous-step field  
+- \( Z^t \): prepares single-step field  
+- \( \cdot \): internal composition  
+- \( + \): accumulation of contributions  
+- \( Z^c \): cleanup/normalization  
 
-This recurrence *is* multi-step evolution in the FDS framework.
+This chain-rule-like recurrence **is** multi-step evolution in FDS.
+
+---
 
 ## 3.5 Dynamic System
 
-A **Dynamic System** in FDS consists of:
+A **Dynamic System** in the FDS sense includes:
 
-- a state space \( S \),
+- state space \( S \),
 - fields \( F \),
 - transforms \( Z^p, Z^t, Z^c \),
-- compositions \( \cdot \) and \( + \),
-- evolution operators implementing the recurrence.
+- compositions \( \cdot \), \( + \),
+- operators implementing the recurrence.
 
 Examples:
 
 - biased random walkers,  
-- sample-mean / dice systems,  
-- thermodynamic or coarse-grained systems,  
-- mapped or correlated systems.
+- dice/sample-mean systems,  
+- thermodynamic/coarse-grained systems,  
+- mapped or correlated systems.  
 
 ---
 
 # 4. Affected Systems Framework
 
-Models **directional influence**:
+Models **directional influence** between dynamic systems.
 
-- Affecting system: \( A_1 = (S_1, F_1, \Theta_1) \)
-- Affected system:  \( A_2 = (S_2, F_2, \Theta_2) \)
+Given two systems:
 
-Influence appears through:
+- \( A_1 = (S_1, F_1, \Theta_1) \)  
+- \( A_2 = (S_2, F_2, \Theta_2) \)
 
-- modified fields,
-- restricted transitions,
-- joint constraints,
-- directional mappings.
+We may define:
 
 ### Joint Field
 
-$$
-F_{12}(s_1, s_2 : s_{10}, s_{20})
-$$
-
-captures combined influence or correlation.
+$$ F_{12}(s_1, s_2 : s_{10}, s_{20}) $$
 
 ### State Space Mapping
 
-$$
-M_{12}: S_1 \to \mathcal{P}(S_2)
-$$
+$$ M_{12} : S_1 \to \mathcal{P}(S_2) $$
 
-assigns regions in \( S_2 \) under the influence of states in \( S_1 \).
+Inverse-like mapping:
 
-Inverse mapping:
-
-$$
-M_{12}^{-1}(s_2) = \{ s_1 \mid s_2 \in M_{12}(s_1) \}
-$$
-
----
+$$ M_{12}^{-1}(s_2) = \{ s_1 \mid s_2 \in M_{12}(s_1) \} $$
 
 ### Classed State Spaces
 
-Partition \( S \) into equivalence classes:
+Partition \( S \) into equivalence classes based on:
 
-- same energy,  
-- same count sum,  
-- same conserved quantity.
+- conserved quantities,  
+- symmetry properties,  
+- aggregated characteristics.  
 
-A **classified field** aggregates fields over each class, revealing symmetries.
+A **classified field** aggregates field values over classes, revealing symmetries.
 
 ### Grouped Evolution
-
-Subsystems or state blocks may evolve jointly under shared influence.
+Subsystems or blocks of states may evolve jointly under shared influence.
 
 ---
 
 # 5. Ensemble Framework
 
-An **ensemble** is a collection:
+An **ensemble** is:
 
-$$
-\mathcal{E} = \{ A_1, A_2, \dots, A_n \}.
-$$
+$$ \mathcal{E} = \{ A_1, A_2, \ldots, A_n \}. $$
 
 Used for:
 
-- comparing systems,
-- evolving multiple systems in parallel,
-- multi-scale modeling,
-- exploring symmetry or divergence.
+- comparison of models,  
+- multi-scale analysis,  
+- joint evolution,  
+- symmetry detection.  
 
 ### Ensemble Operators
 
@@ -317,10 +270,10 @@ Used for:
 
 Stores:
 
-- state space mappings,
-- field correspondences,
-- system distances,
-- symmetry relationships.
+- state space mappings,  
+- field correspondences,  
+- system distances,  
+- symmetry relationships.  
 
 ---
 
