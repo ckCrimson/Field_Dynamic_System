@@ -107,13 +107,13 @@ This concept is key when we build recurrence relations for multi-step evolution.
 ### 3.2 Fields and Field Values
 
 **Field**  
-A **field** assigns a value to each state or transition. In general,
+A **field** assigns a value to each state or transition. In general:
 
-$
+$$
 F: S \to \mathcal{V}
 \quad \text{or} \quad
 F: S \times S \to \mathcal{V},
-$
+$$
 
 where $\mathcal{V}$ is some value space (e.g. real numbers, complex numbers, vectors, tensors).
 
@@ -139,9 +139,9 @@ For many systems, the field values (or their norms) define transition probabilit
 **Kernel**  
 A **kernel** is a rule (or a field) that assigns weights to candidate next states given a current state. Conceptually:
 
-$
+$$
 K(s \to s') = \text{weight}(s, s').
-$
+$$
 
 The kernel describes the *tendency* of the system to move from one state to another before normalization.
 
@@ -158,11 +158,11 @@ Two common types:
 
 By applying $\Theta$ repeatedly, we get:
 
-$
+$$
 s_{k+1} = \Theta(s_k)
 \quad \text{or} \quad
 P^{k+1} = \Theta(P^k),
-$
+$$
 
 where $P^k$ is a probability distribution at step $k$.
 
@@ -173,28 +173,27 @@ where $P^k$ is a probability distribution at step $k$.
 **Path**  
 A **path** is a sequence of states:
 
-$
+$$
 \pi = (s_0, s_1, \dots, s_\ell),
-$
+$$
 
 obtained by applying the operator $\Theta$ step-by-step (possibly probabilistically).
 
 **Path Probability**  
 If transitions are Markovian, the probability of a path is:
 
-$
+$$
 \mathbb{P}[\pi] = \prod_{k=1}^{\ell} P(s_k \mid s_{k-1}),
-$
-
+$$
 
 where each $P(s_k \mid s_{k-1})$ is derived from fields and kernels.
 
 **Path Integral / Sum Over Paths**  
 The probability of being in a state $s_\ell$ after $\ell$ steps is obtained by summing over all paths that end at $s_\ell$:
 
-$
+$$
 P^\ell(s_\ell \mid s_0) = \sum_{\pi : s_0 \to s_\ell} \mathbb{P}[\pi].
-$
+$$
 
 In practice, FDS uses a **recurrence relation** over *reaching* states instead of explicitly enumerating all paths. This is the core multi-step construction.
 
@@ -236,9 +235,9 @@ Consider two dynamic systems:
 
 We can define a **joint (combined) field**:
 
-$
+$$
 F_{12}(s_1, s_2 : s_{10}, s_{20}),
-$
+$$
 
 which assigns a weight or amplitude to pairs of states (or transitions) from both systems.
 
@@ -273,9 +272,9 @@ The influence can appear as:
 
 To formalize relations between systems, we introduce **state space mappings**:
 
-$
+$$
 M_{12}: S_1 \to \mathcal{P}(S_2),
-$
+$$
 
 where $\mathcal{P}(S_2)$ is the set of subsets of $S_2$.
 
@@ -285,9 +284,9 @@ This mapping says:
 
 We also consider an “inverse-like” mapping:
 
-$
+$$
 M_{12}^{-1}(s_2) = \{ s_1 \in S_1 \mid s_2 \in M_{12}(s_1) \},
-$
+$$
 
 which tells us which states in $S_1$ influence a particular state in $S_2$.
 
@@ -357,9 +356,9 @@ While the Affected Systems Framework focuses on **influence and correlation**, t
 
 An **ensemble** is a (finite or countable) collection of dynamic systems:
 
-$
+$$
 \mathcal{E} = \{ A_1, A_2, \dots, A_n \},
-$
+$$
 
 where each $A_i = (S_i, F_i, \Theta_i)$ is a dynamic system in the FDS sense.
 
@@ -414,6 +413,8 @@ The ensemble framework, together with mappings and distances, turns FDS into a *
 
 Below is a high-level conceptual diagram of the FDS framework, emphasizing the role of **Affected Systems** and **Ensembles**.
 
+> Note: GitHub supports Mermaid diagrams natively.  
+> The `click` directives are optional; they can be wired to documentation sections or files.
 
 ```mermaid
 graph TD
