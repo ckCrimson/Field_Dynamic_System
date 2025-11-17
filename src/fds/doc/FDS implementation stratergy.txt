@@ -54,3 +54,40 @@ Dynamic Systems Module(M)
 
 1.2) FieldStaticDynamicSystem(extends FieldStaticDynamicSystem includes MultiStepField, Operator) : Used to define a Dynamic System with fields
 
+-------------------------------------------------- AFFECTING  FRAMEWORK MODULE (4)
+
+Affecting State Module(M) 
+
+1) AffectingGroupState[extends State] : An optional extension of State defining the overall state of the systems Affecting each other
+2) AffectingGroupStateSpace[extends StatSpace a, includes AffectingGroupState]: An optional Extension StateSpace defining the state space of the Affecting group of system
+3) CorrelatedState[Extends State]: An already implemented class whiich needs to be implemented and acts as a default Grouped state for the system if Affecting Group State is Not provided. It acts a first layer to identify the group of affecting systems and define their collective state through Simple one-one mapping between system and tehir state stored in a Map.
+4) CorrelatedStateSpace[Extends StatSpace]: An already implemented class of the StatSpace which acts as an default state space 
+5) AffectedSystemsMapping[extends StateSpaceMapping, includes CorrelatedStateSpace]: A mapping between the CorrelatedStateSpace and AffectingGroupStateSpace which maps the user defined CorrelatedStateSpace with the implentation of the State space which is AffectingGroupStateSpace for the group of systems. 
+
+Affecting Grouping Module(M)
+
+
+1) IsAffecting: Helps identify if any two Systems affect each other
+2) InterAffectingGroups[includes IsAffecting,AffectedSystemsMapping]: Helps group the systems which affect each other
+
+Affecting Reachable(M)
+
+1) AffectedReachable(extends Reacable, include AffectingGroupStateSpace,AffectingGroupState): Defines the single step reachable of an interaffecting group
+2) AffectedReaching(Extends Raching, include  AffectingGroupStateSpace,AffectingGroupState)
+3) AffectingMultiStepReaching(Extends MultiStepReaching includes AffectedReachable,AffectingGroupState)
+
+Afefcting Dynamics(M)
+
+1) AffectingSingleStep(extends SingleStepField)
+2) AffectingMultiStepField(extends MultiStepField)
+3) AffectedSystemsOperator(extends Operator)
+
+Affecting Field Dynamic System(M)
+
+1) AffectingFDS(extends FDS include AffectingGroupState,AffectingGroupStateSpace,AffectedSystemsMapping,AffectedReachable,AffectedReaching,AffectingMultiStepReaching,AffectingMultiStepReaching,AffectedSystemsOperator)
+
+Affcting Group Evolution(M)
+
+1) AffectingGroupsEvolution(includes InterAffectingGroups): Groups the input set of Field Dynamic System and evolves them
+
+---------------------------------- ENSAMBLE MODULE
