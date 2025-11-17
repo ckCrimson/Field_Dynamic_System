@@ -1,6 +1,6 @@
 
 Increasing index shows the order of implementation
-[O] means that it is optional to implement this and include for all applicatiopns
+[O] means that it is optional to implement this and need not to be include for all applicatiopns
 
 
 ------------------------------------------------------ STATIC MODULE(1)
