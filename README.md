@@ -280,57 +280,196 @@ Stores:
 # 6. Conceptual Diagram
 
 ```mermaid
-graph TD
+classDiagram
+    %% ======================
+    %% CORE / STATIC MODULE
+    %% ======================
+    class State {
+      <<core>>
+    }
 
-  %% Core
-  StateSpace["State Space"]
-  State["State"]
-  Field["Field"]
-  FieldValue["Field Value"]
-  Kernel["Kernel"]
-  Operator["Operator"]
-  Path["Path"]
-  PathIntegral["Path Integral (Conceptual)"]
-  DynamicSystem["Dynamic System"]
+    class StateSpace {
+      <<core>>
+    }
 
-  %% Affected systems
-  AffectedFramework["Affected Systems Framework"]
-  JointField["Joint / Combined Field"]
-  Mapping["State Space Mapping"]
-  ClassedSpace["Classed State Space"]
-  ClassifiedField["Classified Field"]
-  GroupedEvolution["Grouped Evolution"]
+    class Reachable {
+      <<core>>
+    }
 
-  %% Ensemble
-  Ensemble["Ensemble of Systems"]
-  EnsembleOp["Ensemble Operator"]
-  MappingRegister["Mapping Register"]
-  Symmetry["Symmetry / Distance / Relationships"]
+    class MultiStepReaching {
+      <<core>>
+    }
 
-  %% Core relationships
-  StateSpace --> State
-  StateSpace --> Field
-  Field --> FieldValue
-  Field --> Kernel
-  Kernel --> Operator
-  Operator --> Path
-  Path --> PathIntegral
-  StateSpace --> DynamicSystem
-  Field --> DynamicSystem
-  Operator --> DynamicSystem
+    class SingleFieldValue {
+      <<core>>
+    }
 
-  %% Affected relationships
-  DynamicSystem --> AffectedFramework
-  AffectedFramework --> JointField
-  AffectedFramework --> Mapping
-  AffectedFramework --> ClassedSpace
-  AffectedFramework --> GroupedEvolution
-  ClassedSpace --> ClassifiedField
-  Mapping --> ClassedSpace
+    class FieldValue {
+      <<core>>
+    }
 
-  %% Ensemble relationships
-  DynamicSystem --> Ensemble
-  Ensemble --> EnsembleOp
-  Ensemble --> MappingRegister
-  MappingRegister --> Symmetry
-  AffectedFramework --> Symmetry
+    class Field {
+      <<core>>
+    }
+
+    class FieldTransform {
+      <<core>>
+    }
+
+    class FieldComposition {
+      <<core>>
+    }
+
+    StateSpace "1" o-- "*" State
+    Reachable --> State
+    Reachable --> StateSpace
+    MultiStepReaching --> Reachable
+    FieldValue --> SingleFieldValue
+    Field --> FieldValue
+    Field --> StateSpace
+    FieldTransform --> Field
+    FieldComposition --> Field
+
+    %% ======================
+    %% DYNAMIC MODULE
+    %% ======================
+    class Kernel {
+      <<dynamic>>
+    }
+
+    class SingleStepField {
+      <<dynamic>>
+    }
+
+    class MultiStepField {
+      <<dynamic>>
+    }
+
+    Kernel --> State
+    Kernel --> FieldValue
+
+    SingleStepField --> Kernel
+    SingleStepField --> Reachable
+    SingleStepField --> Field
+
+    MultiStepField --> SingleStepField
+    MultiStepField --> FieldComposition
+    MultiStepField --> FieldTransform
+    MultiStepField --> MultiStepReaching
+
+    %% ======================
+    %% DYNAMIC SYSTEMS MODULE
+    %% ======================
+    class StaticDynamicSystem {
+      <<system>>
+    }
+
+    class FieldStaticDynamicSystem {
+      <<system>>
+    }
+
+    class FieldDynamicSystem {
+      <<system>>
+    }
+
+    StaticDynamicSystem --> StateSpace
+    StaticDynamicSystem --> Reachable
+    StaticDynamicSystem --> MultiStepReaching
+
+    FieldStaticDynamicSystem --|> StaticDynamicSystem
+    FieldStaticDynamicSystem --> Field
+
+    FieldDynamicSystem --|> FieldStaticDynamicSystem
+    FieldDynamicSystem --> MultiStepField
+
+    %% ======================
+    %% AFFECTING FRAMEWORK
+    %% ======================
+    class CorrelatedState {
+      <<affecting>>
+    }
+
+    class CorrelatedStateSpace {
+      <<affecting>>
+    }
+
+    class AffectingGroupState {
+      <<affecting>>
+    }
+
+    class AffectingGroupStateSpace {
+      <<affecting>>
+    }
+
+    class AffectedSystemsMapping {
+      <<affecting>>
+    }
+
+    class AffectedReachable {
+      <<affecting>>
+    }
+
+    class AffectingMultiStepReaching {
+      <<affecting>>
+    }
+
+    class AffectingSingleStep {
+      <<affecting>>
+    }
+
+    class AffectingMultiStepField {
+      <<affecting>>
+    }
+
+    class AffectedSystemsOperator {
+      <<affecting>>
+    }
+
+    class AffectingFDS {
+      <<affecting>>
+    }
+
+    CorrelatedState --|> State
+    CorrelatedStateSpace --|> StateSpace
+    AffectingGroupState --|> State
+    AffectingGroupStateSpace --|> StateSpace
+
+    AffectedSystemsMapping --> CorrelatedStateSpace
+    AffectedSystemsMapping --> AffectingGroupStateSpace
+
+    AffectedReachable --|> Reachable
+    AffectingMultiStepReaching --|> MultiStepReaching
+
+    AffectingSingleStep --|> SingleStepField
+    AffectingMultiStepField --|> MultiStepField
+    AffectedSystemsOperator --> AffectingMultiStepField
+
+    AffectingFDS --|> FieldDynamicSystem
+    AffectingFDS --> AffectingGroupState
+    AffectingFDS --> AffectingGroupStateSpace
+    AffectingFDS --> AffectedSystemsMapping
+    AffectingFDS --> AffectedReachable
+    AffectingFDS --> AffectingMultiStepReaching
+    AffectingFDS --> AffectedSystemsOperator
+
+    %% ======================
+    %% ENSEMBLE MODULE (STUB)
+    %% ======================
+    class Ensemble {
+      <<ensemble>>
+      + systems : List[FieldDynamicSystem]
+    }
+
+    class EnsembleOperator {
+      <<ensemble>>
+    }
+
+    class MappingRegister {
+      <<ensemble>>
+    }
+
+    Ensemble --> FieldDynamicSystem
+    EnsembleOperator --> Ensemble
+    MappingRegister --> Ensemble
+    MappingRegister --> FieldDynamicSystem
+
