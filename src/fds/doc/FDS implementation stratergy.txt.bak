@@ -1,0 +1,93 @@
+
+Increasing index shows the order of implementation
+[O] means that it is optional to implement this and need not to be include for all applicatiopns
+
+
+------------------------------------------------------ STATIC MODULE(1)
+State Module(M)
+
+1) State: defines a configuration of the system through any mathematical object
+2.1) StatSpace(includes state) : set of all possible states sytem could be found in
+2.2[O]) StateSpaceMapping:(includes StatSpace) mapping form any one single state space to another state space
+2.3[O]) StateOperations(includes State): Operation defined between any two states resulting in another state
+3.1) Reachable(includes State, StateSpace): a set of all possible states system could be found or transition to from any single state
+3.2[O]) Raching((includes State, StateSpace)): a set of all possible state which can transition to a given state basically inverse of Reachable
+4) MultiStepReaching((includes State, StateSpace): Using Reachable returns a state space which system can transition to after l steps
+
+Field Module(M)
+
+1) SingleFieldValue: a single field value without any operations defined
+2.1) SingleFieldValueComposition(Includes SingleFieldValue ): Composition operation any two SingleFieldValue returning another SingleFieldValue
+2.3 SingleFieldValueTransform(Includes SingleFieldValue ): Transform for any singgle field value type to other or same
+3.1) AdditionSIngleFieldValue(extends SingleFieldValueComposition ): Addition operation defined for two field values
+3.2) NormTransform(extends SingleFieldValueTransform): Normalization of any Field Value to a real number 
+4.1) FieldValue(includes SingleFieldValue, AdditionSingleFieldValue,NormTransform ): Wrapper comnbining Single Field Value with Add and Norm
+4.2[O]) FieldFunction(includes state,fieldValue):  A function between state space and Field for that state
+5) Field(includes FieldFunction[O], fieldValue,statspace) : Field Value defined over the state space
+6.1) FieldTransform(includes Field,SingleFieldValueTransform): TransForm one field to another field type over the same type of  state space
+6.2) FieldComposition((includes Field,SingleFieldValueComposition)): Comnposeds two field defined over same type iof state space
+
+
+State Module + Field Module = Static Module/ Core Module
+------------------------------------------------------------- DYNAMIC MODULE(2)
+
+Single Step Module(M)
+
+1) Kernel[includes core module] : Gives the value of single step field wouthoy the incfluence of the global fields
+2.1[O]) Hooking Bias[includes Core module] 
+2.2[O]) KernelFieldComposition[icludes core module]: Defines the compositio between Kernel Field and Global Field
+2.3) SingleStepField[includes Kernal, Reacable, HookingBias]: Defines the field for the single step
+
+Multi Step Module(M)
+
+1)MultiStepField(includes Reachable,singleStep,FieldComposition,FieldTransform): Used to generate the multi step field from the single step given the composition
+
+Single Step Module + Multi Step Module = Dynamic Module
+
+-------------------------------------------------- DYNAMIC SYSTEMS MODULE(3)
+
+Dynamic Systems Module(M)
+
+1[O]) StaticDynamicSystem(includes state, statSpace,reachable,reacging[O],MultiStepReaching) Used to define a Dynamic systems with only States represnting the States 
+
+1.1[O]) FieldStaticDynamicSystems(extends StaticDynamicSystem, includes Field): Used to define a Static Dynamic Systems with field
+
+1.2) FieldStaticDynamicSystem(extends FieldStaticDynamicSystem includes MultiStepField, Operator) : Used to define a Dynamic System with fields
+
+-------------------------------------------------- AFFECTING  FRAMEWORK MODULE (4)
+
+Affecting State Module(M) 
+
+1) AffectingGroupState[extends State] : An optional extension of State defining the overall state of the systems Affecting each other
+2) AffectingGroupStateSpace[extends StatSpace a, includes AffectingGroupState]: An optional Extension StateSpace defining the state space of the Affecting group of system
+3) CorrelatedState[Extends State]: An already implemented class whiich needs to be implemented and acts as a default Grouped state for the system if Affecting Group State is Not provided. It acts a first layer to identify the group of affecting systems and define their collective state through Simple one-one mapping between system and tehir state stored in a Map.
+4) CorrelatedStateSpace[Extends StatSpace]: An already implemented class of the StatSpace which acts as an default state space 
+5) AffectedSystemsMapping[extends StateSpaceMapping, includes CorrelatedStateSpace]: A mapping between the CorrelatedStateSpace and AffectingGroupStateSpace which maps the user defined CorrelatedStateSpace with the implentation of the State space which is AffectingGroupStateSpace for the group of systems. 
+
+Affecting Grouping Module(M)
+
+
+1) IsAffecting: Helps identify if any two Systems affect each other
+2) InterAffectingGroups[includes IsAffecting,AffectedSystemsMapping]: Helps group the systems which affect each other
+
+Affecting Reachable(M)
+
+1) AffectedReachable(extends Reacable, include AffectingGroupStateSpace,AffectingGroupState): Defines the single step reachable of an interaffecting group
+2) AffectedReaching(Extends Raching, include  AffectingGroupStateSpace,AffectingGroupState)
+3) AffectingMultiStepReaching(Extends MultiStepReaching includes AffectedReachable,AffectingGroupState)
+
+Afefcting Dynamics(M)
+
+1) AffectingSingleStep(extends SingleStepField)
+2) AffectingMultiStepField(extends MultiStepField)
+3) AffectedSystemsOperator(extends Operator)
+
+Affecting Field Dynamic System(M)
+
+1) AffectingFDS(extends FDS include AffectingGroupState,AffectingGroupStateSpace,AffectedSystemsMapping,AffectedReachable,AffectedReaching,AffectingMultiStepReaching,AffectingMultiStepReaching,AffectedSystemsOperator)
+
+Affcting Group Evolution(M)
+
+1) AffectingGroupsEvolution(includes InterAffectingGroups): Groups the input set of Field Dynamic System and evolves them
+
+---------------------------------- ENSAMBLE MODULE
