@@ -1,3 +1,5 @@
+```mermaid
+
 classDiagram
     class State
     class StateSpace

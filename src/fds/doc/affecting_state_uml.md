@@ -19,7 +19,7 @@ classDiagram
       <<core>>
       + state_map : Map[SystemId, State]
     }
-
+```mermaid
     class CorrelatedStateSpace {
       <<core>>
     }

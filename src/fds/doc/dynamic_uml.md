@@ -1,3 +1,5 @@
+```mermaid
+
 classDiagram
     %% ======================
     %% CORE REFERENCES
