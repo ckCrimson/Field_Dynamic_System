@@ -1,3 +1,5 @@
+```mermaid
+
 classDiagram
     class FieldDynamicSystem
     class AffectingGroupState
