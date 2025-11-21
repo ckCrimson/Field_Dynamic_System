@@ -340,3 +340,4 @@ The dice histogram system may be symmetric to a deterministic mean-evolution sys
 | **Mappings** | relate different state spaces |
 | **Correlation** | interacting systems |
 | **Symmetry** | structurally equivalent systems |
+
