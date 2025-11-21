@@ -1,6 +1,6 @@
 # Field Dynamic Systems (FDS) – Brief Theory Overview
 
-## **Abstract**
+## Abstract
 
 A **Field Dynamic System (FDS)** is a general mathematical framework for modeling how systems evolve over time using **states**, **state spaces**, and **fields** (tensors with defined algebra).  
 Instead of classical transition matrices or differential equations, FDS describes evolution using **field-weighted contributions**, **generalized chain-rule recurrence**, and **multi-step path accumulation**.
@@ -16,9 +16,9 @@ This document gives a concise theory overview using a simple **dice system** as 
 
 ---
 
-# **1. States and State Spaces**
+# 1. States and State Spaces
 
-## **1.1 State**
+## 1.1 State
 
 A **state** \( s \) is any mathematical object describing the configuration of a system.
 
@@ -32,7 +32,7 @@ States must support hashing and equality.
 
 ---
 
-## **1.2 State Space \( \mathbf{S} \)**
+## 1.2 State Space \( \mathbf{S} \)
 
 The **state space** is:
 
@@ -48,9 +48,9 @@ Examples:
 
 ---
 
-# **2. Reachability**
+# 2. Reachability
 
-## **2.1 Reachable Set \( \mathbf{V}[s_0] \)**
+## 2.1 Reachable Set \( \mathbf{V}[s_0] \)
 
 For a given state \(s_0\), the **reachable set** is:
 
@@ -63,7 +63,7 @@ If \(s_0\) is a histogram, reachable states are histograms that increment one fa
 
 ---
 
-## **2.2 Reaching Set \( \mathbf{R}[s'] \)**
+## 2.2 Reaching Set \( \mathbf{R}[s'] \)
 
 The **reaching set** (inverse reachable) is:
 
@@ -75,13 +75,15 @@ It lists all predecessors of a state.
 
 ---
 
-## **2.3 Multi-step Reachability \( \mathbf{L}^l[s_0] \)**
+## 2.3 Multi-step Reachability \( \mathbf{L}^l[s_0] \)
 
 The set of all states reachable from \(s_0\) in exactly \(l\) steps is:
 
 $$
 \mathbf{L}^0[s_0] = \{s_0\},
-\qquad
+$$
+
+$$
 \mathbf{L}^l[s_0] = \bigcup_{s \in \mathbf{L}^{l-1}[s_0]} \mathbf{V}[s].
 $$
 
@@ -92,7 +94,7 @@ This drives the multi-step evolution frontier.
 
 ---
 
-# **3. Fields**
+# 3. Fields
 
 A **field** is a tensor-like value with:
 
@@ -109,7 +111,7 @@ Examples:
 
 ---
 
-## **3.1 Field Over a State Space**
+## 3.1 Field Over a State Space
 
 A field defined over the state space is a map:
 
@@ -121,7 +123,7 @@ assigning a field value to each state.
 
 ---
 
-## **3.2 Global Field \(F_g\)**
+## 3.2 Global Field \(F_g\)
 
 A **global field** is another field over the same state space:
 
@@ -137,7 +139,7 @@ representing external influences such as:
 
 ---
 
-# **4. Single-Step Field**
+# 4. Single-Step Field
 
 The single-step field encodes the weighted contribution of moving from \(s_0\) to \(s\) in **one** step.
 
@@ -163,7 +165,7 @@ Global field = temperature-like term that biases certain outcomes.
 
 ---
 
-# **5. Multi-Step Field (Generalized Chain Rule)**
+# 5. Multi-Step Field (Generalized Chain Rule)
 
 Full evolution is not computed by enumerating all paths (which is exponential).  
 Instead we use a **chain-rule-like recurrence**.
@@ -184,9 +186,9 @@ where each path’s contribution is built from:
 - internal composition \(\cdot\),  
 - external accumulation \(+\).
 
-This is implemented using reaching sets:
+This is implemented using reaching sets.
 
-### **General multi-step recurrence**
+### General multi-step recurrence
 
 **Accumulation step:**
 
@@ -195,9 +197,9 @@ F'^{l}(s' : s_0)
 =
 F^{l}(s' : s_0)
 +
-Z^{t}\!\left(F_{t}(s' : s)\right)
+Z^{t}\bigl(F_{t}(s' : s)\bigr)
 \cdot
-Z^{p}\!\left(F^{l-1}(s : s_0)\right)
+Z^{p}\bigl(F^{l-1}(s : s_0)\bigr)
 $$
 
 for every \(s \in \mathbf{R}[s']\).
@@ -207,14 +209,14 @@ for every \(s \in \mathbf{R}[s']\).
 $$
 F^{l}(s' : s_0)
 =
-Z^{c}\!\left(F'^{l}(s' : s_0)\right).
+Z^{c}\bigl(F'^{l}(s' : s_0)\bigr).
 $$
 
 This gives the exact multi-step evolution without enumerating paths.
 
 ---
 
-# **6. Operator**
+# 6. Operator
 
 An operator is a rule that extracts an **observable next state** from the field.
 
@@ -233,7 +235,7 @@ Return the expected mean after each roll.
 
 ---
 
-# **7. Relations Between State Spaces**
+# 7. Relations Between State Spaces
 
 Some systems live in different state spaces, but can still be related using **mappings**.
 
@@ -260,11 +262,11 @@ for some transform \(T\).
 
 ---
 
-# **8. Correlation Between Systems**
+# 8. Correlation Between Systems
 
 Two systems are **correlated** if the field of one **directly depends on the state of the other**, causing coupled evolution.
 
-### **Thermodynamic Heat Exchange Example**
+## Thermodynamic Heat Exchange Example
 
 Let:
 
@@ -294,27 +296,27 @@ This is **correlation**, because their evolutions are *not independent*.
 
 ---
 
-# **9. Symmetry Between Systems**
+# 9. Symmetry Between Systems
 
 Two systems are **symmetric** if under a mapping they evolve equivalently, even if they do **not** interact.
 
 Types:
 
-### **9.1 Path Evolution Symmetry**
+## 9.1 Path Evolution Symmetry
 
 $$
 F_A^{l}(s_A : s_{0A})
 =
-T\!\left(
+T\bigl(
 F_B^{l}(M(s_A) : M(s_{0A}))
-\right).
+\bigr).
 $$
 
-### **9.2 Class-Based Symmetry**
+## 9.2 Class-Based Symmetry
 
 Equivalence classes in both state spaces correspond under mapping.
 
-### **9.3 Expectation Evolution Symmetry (EeS)**
+## 9.3 Expectation Evolution Symmetry (EeS)
 
 Expectations of observables match under mapping.
 
@@ -323,7 +325,7 @@ The dice histogram system may be symmetric to a deterministic mean-evolution sys
 
 ---
 
-# **10. Summary Table**
+# 10. Summary Table
 
 | Concept | Meaning |
 |--------|---------|
@@ -340,4 +342,3 @@ The dice histogram system may be symmetric to a deterministic mean-evolution sys
 | **Mappings** | relate different state spaces |
 | **Correlation** | interacting systems |
 | **Symmetry** | structurally equivalent systems |
-
