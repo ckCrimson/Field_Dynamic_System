@@ -29,7 +29,7 @@ A **state** \( s \) is any mathematical object that describes the configuration 
 
 Examples:
 
-- Dice system: a histogram \( (n_1,n_2,\dots,n_6) \) of face counts.  
+- Dice system: a histogram $ (n_1,n_2,\dots,n_6) $ of face counts.  
 - Random walker: an integer position \( x \).  
 - Thermodynamic toy model: a scalar temperature \( T \).
 
