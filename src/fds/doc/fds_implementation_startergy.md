@@ -34,12 +34,19 @@ Implementation is naturally layered:
    * Affecting-specific dynamics
    * AffectingFDS and group evolution
 
+5. **Practical “Checklist” for Implementing a New System (up to AffectingFDS)**
+
+6. **Ensemble Module**
+
 **Recommended implementation order:**
 
 1. Core (State + Field)
 2. Dynamic (SingleStep + MultiStep)
 3. Dynamic Systems
 4. Affecting Framework (up to AffectingFDS & AffectingGroupsEvolution)
+5. Ensemble (optional but powerful)  
+
+
 
 Optional pieces are marked `[O]` – they are not needed for every use case but make the framework more expressive.
 
@@ -700,6 +707,68 @@ This is the “top level” for affecting dynamics when working with *many* syst
 ---
 
 ## 5. Practical “Checklist” for Implementing a New System (up to AffectingFDS)
+
+---
+
+## 6. Ensemble Module
+
+The **Ensemble Module** sits above individual and affecting systems. It lets you manage:
+
+- multiple **channels** of evolution (each channel is its own `AffectingGroupsEvolution`), and  
+- an overall **Ensemble** object that coordinates them.  
+
+This is where you can run different “views” or “routes” of interaction and compare them.
+
+### 6.1 `EnsembleOperator`
+
+* **What it is:** A high-level operator that works across *channels* of affecting evolution.
+* **Includes:**
+  * A list of `AffectingGroupsEvolution` instances.
+* **Interpretation:**
+  * Each `AffectingGroupsEvolution` in the list represents **one channel**:
+    * a particular way of grouping systems,
+    * a particular configuration of affecting relations,
+    * its own dynamics schedule.
+* **Responsibilities:**
+  * Coordinate evolution across all channels:
+    * step each `AffectingGroupsEvolution` according to some logic (synchronous or custom),
+    * gather results (e.g., trajectories, distributions) from each channel,
+    * optionally compare or aggregate channel outcomes (e.g., averaging, voting, diagnostics).
+
+You can think of `EnsembleOperator` as a controller that runs many different “what if” configurations side by side.
+
+---
+
+### 6.2 `Ensemble`
+
+* **What it is:** The main object representing an ensemble of field dynamic systems and their channelized affecting evolutions.
+* **Includes:**
+  * A list of `FieldDynamicSystem` objects,
+  * A list of `AffectingGroupsEvolution` (one per channel),
+  * An `EnsembleOperator`.
+* **Initialization pattern:**
+  * Start with a list of base `FieldDynamicSystem`s you want in your ensemble.
+  * For each **channel** you want to study:
+    * create an `AffectingGroupsEvolution` instance,
+    * initialize it with an *empty* list of `FieldDynamicSystem` but with all other required components (grouping logic, mapping, etc.),
+    * register or attach the relevant `FieldDynamicSystem`s to that channel.
+  * Pass the list of `AffectingGroupsEvolution` into the `Ensemble` along with the base systems.
+* **Responsibilities:**
+  * Hold:
+    * the **universe of systems** you care about (`FieldDynamicSystem` list),
+    * the **different channels** (`AffectingGroupsEvolution` list),
+    * the **operator** that drives them (`EnsembleOperator`).
+  * Provide:
+    * a way to run all channels,
+    * a way to extract per-channel and cross-channel statistics or trajectories.
+
+Conceptually, the `Ensemble` is the topmost container you use when:
+
+- you want to run **multiple interacting scenarios** in parallel,
+- you want to explore **different affecting structures** for the same set of systems,
+- you want to systematically compare results across channels.
+
+---
 
 For a **single system**:
 
