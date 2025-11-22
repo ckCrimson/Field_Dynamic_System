@@ -791,3 +791,26 @@ To extend into the **Affected Systems Framework**:
 14. Implement `AffectingFDS` to tie everything together.
 15. Optionally implement `AffectingGroupsEvolution` to handle many systems at once.
 
+To extend into the **Ensemble Framework**:
+
+16. Collect the `FieldDynamicSystem` instances you want to study together into a list (these are the base systems of your ensemble).
+17. For each *channel* of interaction you want to model:
+    - create an `AffectingGroupsEvolution` instance,
+    - initialize it (it should be able to build affecting groups from an input list of `FieldDynamicSystem`s),
+    - configure any channel-specific logic (e.g., how systems are grouped or scheduled).
+18. Implement `EnsembleOperator`:
+    - store a list of `AffectingGroupsEvolution` (one per channel),
+    - provide methods to step all channels, collect results, and optionally compare or aggregate them.
+19. Implement `Ensemble`:
+    - store the list of `FieldDynamicSystem` (the universe of systems),
+    - store the list of `AffectingGroupsEvolution` (the channels),
+    - store an `EnsembleOperator` instance,
+    - provide a high-level `run` / `evolve` interface that:
+      - initializes channels with the relevant systems,
+      - calls the `EnsembleOperator` to evolve all channels,
+      - exposes per-channel and cross-channel outputs (trajectories, statistics, diagnostics).
+20. Optionally, add helpers around `Ensemble`:
+    - utilities to add/remove systems or channels,
+    - convenience methods to compare channels (e.g., norms between fields, expectation evolution symmetry checks),
+    - presets for common ensemble setups (e.g., “independent channels”, “shared mapping register”, etc.).
+
