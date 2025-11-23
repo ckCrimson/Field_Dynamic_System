@@ -1,7 +1,7 @@
 from abc import ABC, abstractmethod
 from typing import Generic, TypeVar
 
-from fds import State, Field, StatSpace
+from fds import State, Field, StatSpace, FieldValue
 from fds.core.fds_state import StateSpaceMapping
 
 Sin = TypeVar('Sin', bound=State)
@@ -17,11 +17,12 @@ class Distribution(ABC, Generic[Sin, Sout]):
     @abstractmethod
     def distributionFunction(
         self,
-        field_in: Field[Sin],
-        field_out: Field[Sout]
+        field_value:  FieldValue,
+        field_out_prototype: Field[Sout]
     ) -> Field[Sout]:
         """
         Given an input field and a single input state plus its mapped output space,
         return a Field over that output space representing the distribution.
+        // forming an empty output field
         """
         pass

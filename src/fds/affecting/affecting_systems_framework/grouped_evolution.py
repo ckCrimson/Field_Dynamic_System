@@ -88,7 +88,7 @@ class AffectingGroupsEvolution(ABC, Generic[S]):
     @abstractmethod
     def form_affected_system_from_dict(
         self,
-        group: Dict[str, FieldStaticDynamicSystem]
+        group: Dict[str, FieldDynamicSystem]
     ) -> AffectingFDS:
         """
         Build a concrete AffectingFDS from a dict of member systems.

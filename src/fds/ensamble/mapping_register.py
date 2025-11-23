@@ -30,7 +30,7 @@ class IdentityMapping(StateSpaceMapping[S, S], Generic[S]):
 
 
 
-class MappingRegister:
+class gister:
     """
     Matrix-style register of pairwise mappings between channel/state-space ids.
 

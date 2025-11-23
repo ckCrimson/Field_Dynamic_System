@@ -56,19 +56,21 @@ class AffectingFDS(FieldDynamicSystem[S], ABC, Generic[S]):
         system_global_field: Optional[Field] = None,
         build_from_reachable:bool=False,
         within_state_space:bool=False,
-        sync_members_from_s0: bool = False  # if True and s0 provided, push s0 → members
+        sync_members_from_s0: bool = False , # if True and s0 provided, push s0 → members
+        consistency_check: bool = True,
     ) -> None:
         # ---- store & sanity checks ----
-        if state_space is None:
-            raise ValueError("AffectingFDS: `state_space` must not be None.")
-        if field is None:
-            raise ValueError("AffectingFDS: `field` must not be None.")
-        if reachable is None:
-            raise ValueError("AffectingFDS: `reachable` must not be None.")
-        if multi_step_field is None:
-            raise ValueError("AffectingFDS: `multi_step_field` must not be None.")
-        if operator is None:
-            raise ValueError("AffectingFDS: `operator` must not be None.")
+        if consistency_check:
+            if state_space is None:
+                raise ValueError("AffectingFDS: `state_space` must not be None.")
+            if field is None:
+                raise ValueError("AffectingFDS: `field` must not be None.")
+            if reachable is None:
+                raise ValueError("AffectingFDS: `reachable` must not be None.")
+            if multi_step_field is None:
+                raise ValueError("AffectingFDS: `multi_step_field` must not be None.")
+            if operator is None:
+                raise ValueError("AffectingFDS: `operator` must not be None.")
 
         self.members = members
         self.mapping = mapping
@@ -112,11 +114,12 @@ class AffectingFDS(FieldDynamicSystem[S], ABC, Generic[S]):
         )
 
         # optional: light invariant in debug builds
-        try:
-            self._assert_consistency()
-        except Exception:
-            # swallow in production if you prefer; keep for debugging
-            pass
+        if consistency_check:
+            try:
+                self._assert_consistency()
+            except Exception:
+                # swallow in production if you prefer; keep for debugging
+                pass
 
     # ---------------- utilities ----------------
     def _assert_consistency(self) -> None:
