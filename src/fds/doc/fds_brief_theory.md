@@ -29,7 +29,7 @@ A **state** \( s \) is any mathematical object that describes the configuration 
 
 Examples:
 
-- Dice system: a histogram $ (n_1,n_2,\dots,n_6) $ of face counts.  
+- Dice system: a histogram  (n_1,n_2,\dots,n_6) \) of face counts.  
 - Random walker: an integer position \( x \).  
 - Thermodynamic toy model: a scalar temperature \( T \).
 
@@ -37,7 +37,7 @@ States should at least support equality and hashing.
 
 ---
 
-## 1.2 State Space \( \mathbf{S} \)
+## 1.2 State Space **S**
 
 The **state space** is the set of all allowed states:
 
@@ -53,7 +53,7 @@ Examples:
 
 # 2. Reachability
 
-## 2.1 Reachable Set \( \mathbf{V}[s_0] \)
+## 2.1 Reachable Set **V**[s_0]
 
 The **reachable set** from a state \( s_0 \) is:
 
@@ -63,7 +63,7 @@ Dice example: if \( s_0 \) is a current histogram, then \( \mathbf{V}[s_0] \) co
 
 ---
 
-## 2.2 Reaching Set \( \mathbf{R}[s'] \)
+## 2.2 Reaching Set **R[s']**
 
 The **reaching set** (inverse reachable) is:
 
@@ -73,7 +73,7 @@ This is the set of all predecessor states that can reach \( s' \) in one step.
 
 ---
 
-## 2.3 Multi-step Reachability \( \mathbf{L}^l[s_0] \)
+## 2.3 Multi-step Reachability $ L^l[s_0] $
 
 The set of states reachable from \( s_0 \) in exactly \( l \) steps is defined recursively:
 
