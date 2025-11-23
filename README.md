@@ -455,17 +455,19 @@ classDiagram
     %% ======================
     %% ENSEMBLE MODULE (STUB)
     %% ======================
+    class EnsembleOperator {
+      <<ensemble>>
+      + channels : List[AffectingGroupsEvolution]
+      + stepAll()
+      + collectResults()
+    }
+
     class Ensemble {
       <<ensemble>>
       + systems : List[FieldDynamicSystem]
-    }
-
-    class EnsembleOperator {
-      <<ensemble>>
-    }
-
-    class MappingRegister {
-      <<ensemble>>
+      + channels : List[AffectingGroupsEvolution]
+      + operator : EnsembleOperator
+      + run()
     }
 
     Ensemble --> FieldDynamicSystem
