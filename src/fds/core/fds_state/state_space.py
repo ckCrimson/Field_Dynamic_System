@@ -23,7 +23,10 @@ class StatSpace(Generic[S],ABC):
         self._current_state: S = initial_state
         self.build_from_states(set_of_states,initial_state)
 
-    @abstractmethod
+    def build_state_space(self, *args,**kwargs) -> Iterator[S]:
+        pass
+
+
     def build_from_states(self, states: Iterable[S], current: Optional[S] = None) -> "StatSpace[S]":
         """Construct (or reconstruct) the universe deterministically from 'states'."""
         ...

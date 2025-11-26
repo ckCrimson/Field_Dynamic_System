@@ -41,9 +41,10 @@ class Field(Generic[S]):
     def get_zero_field(self) -> FieldValue:
         return self._unit.get_zero_field()
 
-    def set_field(self, state: S, value: FieldValue, field_function:FieldFunction[Optional]=None) -> None:
+    def set_field(self, state: S, value: FieldValue=None, field_function:FieldFunction[Optional]=None) -> None:
         """Set the FieldValue at the given state."""
-        self._values[state] = value
+        if value is not None:
+            self._values[state] = value
         if field_function is not None:
             self.constant_indicator=False
             self.field_function = field_function
