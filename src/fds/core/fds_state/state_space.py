@@ -23,9 +23,6 @@ class StatSpace(Generic[S],ABC):
         self._current_state: S = initial_state
         self.build_from_states(set_of_states,initial_state)
 
-    def build_state_space(self, *args,**kwargs) -> Iterator[S]:
-        pass
-
 
     def build_from_states(self, states: Iterable[S], current: Optional[S] = None) -> "StatSpace[S]":
         """Construct (or reconstruct) the universe deterministically from 'states'."""
@@ -317,7 +314,9 @@ class DiscreteInfiniteStateSpace(DiscreteSpace, StatSpace[S], ABC):
 class ContinuousFiniteStateSpace(ContinuousSpace, StatSpace[S], ABC):
     """Usually rare; if truly finite, you can still store a frozenset like above."""
     # implement similarly to DiscreteFiniteStateSpace if needed
-    ...
+    @abstractmethod
+    def build_state_space(self, *args, **kwargs) -> Iterator[S]:
+        '''Needs to be implemented by all subclasses to build the state space'''
 
 
 # ------------------helper method to build space from reference ----------------#
