@@ -1,3 +1,5 @@
+```mermaid
+
 classDiagram
     %% ======================
     %% STATE MODULE (CORE)
