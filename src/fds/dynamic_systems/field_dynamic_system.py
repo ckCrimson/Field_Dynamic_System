@@ -27,7 +27,7 @@ class FieldDynamicSystem(FieldStaticDynamicSystem[S], Generic[S]):
       system_global_field: secondary global field inherited each iteration
     """
     def __init__(self, initial_state : State , field: Field[S], multi_step_field: MultiStepField[S], reachable: Reachable[S],
-                 operator: Operator[S], transition_list: list[S],state_space: StatSpace[S] = None,
+                 operator: Operator[S], transition_list: list[S]=None,state_space: StatSpace[S] = None,
                  reaching: Reaching[S]=None,
                  system_global_field: Optional[Field[S]] = None, own_produced_field: Optional[Field[S]] = None,
                  build_from_reachable = False,within_state_space = False, multi_step_reaching: MultiStepReaching=None) -> None:
@@ -35,6 +35,8 @@ class FieldDynamicSystem(FieldStaticDynamicSystem[S], Generic[S]):
         self.multi_step_field = multi_step_field
        # self.pdf_field = pdf_field
         self.operator = operator
+        if transition_list is None:
+            transition_list: list[S]=[]
         self.transition_list = transition_list
         self.transition_list.append(initial_state)
         # If no initial_system provided, use self as initial,

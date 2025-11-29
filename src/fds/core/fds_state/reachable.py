@@ -37,7 +37,7 @@ class Reachable(ABC, Generic[S]):
         self.is_allowed: Optional[IsAllowedState[S]] = is_allowed
         self.from_allowed_only: bool = from_allowed
 
-    @abstractmethod
+
     def get_reachable(
         self,
         state: S,

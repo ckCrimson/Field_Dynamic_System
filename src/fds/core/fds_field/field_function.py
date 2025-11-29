@@ -1,4 +1,4 @@
-from abc import ABC
+from abc import ABC, abstractmethod
 from typing import Generic, TypeVar
 
 
@@ -26,11 +26,15 @@ class FieldFunction(ABC, Generic[S]):
     - get_field_for_space(space): returns a Field defined over the given StateSpace.
     - function(state): core mapping for the fds_field value (can implement recurrence).
     """
-    def __init__(self, func: FunctionDefinition ,**param):
+    def __init__(self, func: FunctionDefinition=None ,**param):
         self.param = param
         self.func = func
 
+    @abstractmethod
+    def get_field(self,state: S) -> FieldValue:
+        pass
+
     def get_field_at(self, state: S) -> FieldValue:
         """Return the FieldValue corresponding to the given state."""
-        return self.func.function(state)
+        return self.get_field(state)
 
