@@ -70,6 +70,13 @@ This is the “geometry” of your system.
   * Support hashing / equality so it can be used as keys in dictionaries/sets.
 * **Design tip:** Make `State` as *lightweight* as possible (no heavy logic, just identity and minimal helpers).
 
+* **Important Components**
+  * Must be hashable (`__hash__`, `__eq__`)
+  * Lightweight container (tuple-like or dataclass)
+  * Should not embed heavy logic
+  * Represents one configuration uniquely
+
+
 ---
 
 #### 1.1.2 `StateSpace`
@@ -84,6 +91,11 @@ This is the “geometry” of your system.
     * iterating over local neighbourhoods or predefined sets,
     * optional indexing / ID schemes if needed.
 * **Conceptually:** Every dynamic system has exactly one primary `StateSpace`.
+* **Important Componts**
+  *  `contains(state)` or `__contains__`
+  *   Optional: neighbourhood structure
+  *   Must provide iterable access to states (when finite)
+  *    Metadata describing constraints on states
 
 ---
 
@@ -98,6 +110,11 @@ This is the “geometry” of your system.
 
   * Given a state in `S1`, return the corresponding state(s) or region in `S2`.
   * Optionally provide an inverse-like mapping.
+*  **Important Components**
+    * `map_state(s)` → mapped state(s)
+    *  Optional: `inverse_map_state(s')`
+    *  Used for multi-system relations and ensembles
+    *  Required for Affected Systems Framework
 
 You don’t need this for a single isolated system, but it becomes important for **multi-system relations** and **AffectingFDS**.
 
@@ -112,6 +129,11 @@ You don’t need this for a single isolated system, but it becomes important for
   * Composing labels,
   * Custom algebraic structures on states.
 * **You can skip it** if your system doesn’t require explicit state–state operations and you only care about transitions via kernels.
+* **Important Compoenents**
+  * `op(s1, s2)` → State
+  * Optional algebraic structure
+  * Only needed in systems requiring explicit state algebra
+
 
 ---
 
@@ -123,7 +145,11 @@ You don’t need this for a single isolated system, but it becomes important for
   * Given `s`, compute `V[s] = { s' | direct transition s → s' is allowed }`.
 * **Use:**
 
-  * Core primitive for both single-step dynamics and multi-step recurrence. 
+  * Core primitive for both single-step dynamics and multi-step recurrence.
+* **Important Components**
+    *  `get(s)` → set of neighbours
+    *   Defines the transition neighbourhood
+    *   Used by: SingleStepField, MultiStepField, all recurrence logic
 
 This is the *local neighbourhood oracle* of the system.
 
@@ -138,6 +164,10 @@ This is the *local neighbourhood oracle* of the system.
 * **Use:**
 
   * In principle, the multi-step algorithm can be written in terms of **reaching states**; in practice, you can compute this on the fly from `Reachable`.
+* Important Componets
+    * `get(s)` → set of neighbours
+    * Defines the transition neighbourhood
+    * Used by: SingleStepField, MultiStepField, all recurrence logic
 * **Optional:** You can implement it explicitly for clarity or optimization.
 
 ---
@@ -152,6 +182,11 @@ This is the *local neighbourhood oracle* of the system.
     * `L⁰[s0] = {s0}`,
     * `L¹[s0] = V[s0]`,
     * `L²[s0]`, etc.
+* **Importnat Components**
+    * `compute_layers(s0, depth)` → list of reachable layers
+    * Maintains frontier layers `L^l[s0]`
+    * Used directly by MultiStepField
+    
 * **Use:**
 
   * Drives the *frontier* of the multi-step evolution, telling which states we need to consider at each step.
@@ -169,6 +204,10 @@ This is the “weighting” and “information” layer.
 
   * Store a single value, independent of operations.
 * **Design tip:** Keep it generic enough to support both real and complex systems.
+* **Important Components**
+  * Holds a scalar/tensor/vector value
+  * Should support cloning / copying
+  * Lightweight wrapper around a raw value
 
 ---
 
@@ -181,6 +220,9 @@ This is the “weighting” and “information” layer.
   * Addition in log-domain,
   * Other algebra depending on the model.
 * **Use:** This will later become the *internal composition* in your multi-step recurrence.
+* **Important Components**
+   * `compose(a, b)` → new SingleFieldValue
+   * Defines the internal composition used inside recurrence
 
 ---
 
@@ -191,6 +233,10 @@ This is the “weighting” and “information” layer.
   * Normalization preparation,
   * Non-linear activation,
   * Mapping between representations.
+ 
+* **Important Components**
+  * `apply(v)` → transformed value
+  * Used for Zᵖ, Zᵗ, Zᶜ at value level
 * **Used for:**
 
   * `Z^p`, `Z^t`, `Z^c`-style transforms at the field-value level.
@@ -203,6 +249,9 @@ This is the “weighting” and “information” layer.
 * **Typical use:**
 
   * External accumulation across contributions from different reaching states.
+* Important Components
+  * `add(a, b)` or `compose(a, b)`
+  * Must define neutral/zero behaviour
 * **Why separate:** Keeps the core interface general, while providing a default “plus”-like operation.
 
 ---
@@ -213,6 +262,9 @@ This is the “weighting” and “information” layer.
 * **Used for:**
 
   * Turning raw field values into weights/probabilities.
+* Important Components
+  * `norm(v)` → real number
+  * Used for probabilities / weights
 * **Examples:**
 
   * ( |z|^2 ) for complex amplitudes,
@@ -231,6 +283,10 @@ This is the “weighting” and “information” layer.
     * its addition (`AdditionSingleFieldValue`),
     * its norm (`NormTransform`),
     * possibly other transforms.
+* **Important Components**
+  * `value` attribute
+  * `add`, `compose`, `norm` delegates
+  * must be compatible with Field
 * **Benefit:** Makes field-level code independent of the exact scalar type.
 
 ---
@@ -239,7 +295,8 @@ This is the “weighting” and “information” layer.
 
 * **What it is:** A function-like object `State → FieldValue`.
 * **Role:**
-
+* **Important Components**
+    *  `get_field(initial_state, state)` needs to be implemented to get the fields at a state
   * Represents “field as a function on state space”.
 * **Optional:** In many implementations, `Field` will embed this behaviour directly.
 
@@ -252,6 +309,11 @@ This is the “weighting” and “information” layer.
 
   * Store field values on states or transitions.
   * Provide lookup and iteration over supported states.
+* **Important Components**
+  * Internal mapping: `state -> FieldValue`
+  *  `get(s)` to retrieve field value
+  *  Must support iteration over its defined states
+
 * **Important:** This is the primary carrier of information that drives the dynamics.
 
 ---
@@ -265,6 +327,10 @@ This is the “weighting” and “information” layer.
   * Filtering,
   * Projection,
   * Applying `Z^p`, `Z^t`, `Z^c` at the field level.
+* **Important Components**
+  * `apply(field)` → new field
+  * Applies transforms to all state entries
+  * Used for Zᵖ, Zᵗ, Zᶜ at field level
 
 ---
 
@@ -277,6 +343,10 @@ This is the “weighting” and “information” layer.
 
     * combine single-step fields with previous-step fields,
     * combine global and local contributions.
+* **Important Components**
+  * `compose(f1, f2)` → new field
+  * Applies composition pointwise over intersection/union (configurable)
+  * Core operation for multi-step recurrence
 
 ---
 
@@ -298,6 +368,11 @@ The dynamic module turns static objects (states & fields) into actual **evolutio
 
   * Given a state `s` and a candidate `s'` (with `s' ∈ V[s]`), provide a field value that encodes the “raw tendency” to move `s → s'`.
   * Depends on core modules only (State, StateSpace, FieldValue, etc).
+* **Important Components**
+  * `get(s, s')` → FieldValue
+  * Depends on Reachable and underlying physics
+  * Produces intrinsic step tendency
+
 * **Interpretation:**
 
   * Think of it as a local transition rule or kernel ( K(s \to s') ).
@@ -312,6 +387,11 @@ The dynamic module turns static objects (states & fields) into actual **evolutio
   * Incorporate momentum-like effects,
   * Apply environment-induced biases,
   * Represent hooks into other subsystems.
+* **Important Components**
+ * `get(s, s')` → FieldValue
+ *  Depends on Reachable and underlying physics
+ *  Produces intrinsic step tendency
+
 
 ---
 
@@ -321,6 +401,11 @@ The dynamic module turns static objects (states & fields) into actual **evolutio
 * **Purpose:**
 
   * To define how “bare” kernel and environment/global field combine.
+* **Important Components**
+  * `get(s, s')` → FieldValue
+  *  Depends on Reachable and underlying physics
+  *  Produces intrinsic step tendency
+
 * **Typical semantics:**
 
   * Pointwise multiplication, convolution, or any custom composition defined at the field level.
