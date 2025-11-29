@@ -371,6 +371,53 @@ This is the “one-step physics” of your system.
     * optionally probability distributions derived from them.
 
 At this point, you can already **evolve fields over time** for a single system.
+## 2.3. Operator Module
+
+The **Operator Module** is the bridge between:
+
+- the internal field-based evolution (multi-step fields, contributions), and
+- the **observable behaviour** of the system (next state, trajectories, statistics, etc.).
+
+Formally, an operator is a rule that takes the current configuration of a dynamic system (fields, state, step index) and returns an **observable outcome**:
+
+- a single next state,
+- a distribution over states,
+- an expectation of some observable,
+- or a combination of these.
+
+In the simplest case, an operator is a map:
+
+- $\( \Theta : S \rightarrow S \)$   (next-state operator), or  
+- $\( \Theta : (F^l, \text{context})$ \rightarrow \text{observable} \).
+
+In the implementation, we distinguish between:
+
+- **base operators** for a single `FieldDynamicSystem`,
+- **group operators** for the affecting framework,
+- **ensemble operators** for running many channels.
+
+---
+
+### 2.3.1 Base Operator for FieldDynamicSystem
+
+For a single system, an operator consumes:
+
+- the multi-step field `MultiStepField`,
+- the current step index \( l \),
+- the initial state \( s_0 \),
+- (optionally) extra context (observables, masks, etc.),
+
+and produces something observable.
+
+#### Important components (minimal)
+
+A base operator interface should provide at least one of:
+
+- **Next state selection**
+
+  ```python
+  next_state(self, fds: FieldDynamicSystem, s0: State, l: int) -> State
+
 
 ---
 
