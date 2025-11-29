@@ -3,7 +3,7 @@
 
 This document is a **step-wise guide** for implementing systems in the **Field Dynamic Systems (FDS)** framework, up to and including the **Affecting Field Dynamic System (AffectingFDS)**.
 
-It assumes you already understand the theory (states, fields, multi-step recurrence, affected systems). For derivations and equations, see the theory **[doc/fds_brief_theory](doc/fds_brief_theory)**. 
+It assumes you already understand the theory (states, fields, multi-step recurrence, affected systems). For derivations and equations, see the theory **[doc/fds_brief_theory](src/fds/doc/fds_brief_theory.md)**. 
 
 Here we focus on **what to implement, in what order, and why**. The structure follows the modules in the implementation strategy. 
 
