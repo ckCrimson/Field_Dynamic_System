@@ -9,7 +9,11 @@ from fds import FieldValue
 
 class DiceRealFieldValue(FieldValue):
     data: DiceRealSingleFieldValue
-    normTransform: DiceFieldValueNorm=None
-    additionComposition: "DiceFieldValueAddition"=None
 
-DiceRealFieldValue.configure(DiceFieldValueNorm(),DiceFieldValueAddition())
+
+    def get_unitary_field(self) -> 'DiceRealFieldValue':
+        return DiceRealFieldValue(DiceRealSingleFieldValue(1))
+
+    def get_zero_field(self) -> "DiceRealFieldValue":
+        return DiceRealFieldValue(DiceRealSingleFieldValue(0))
+

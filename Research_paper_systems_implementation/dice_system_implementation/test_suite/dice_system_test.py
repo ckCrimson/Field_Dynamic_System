@@ -1,3 +1,11 @@
+from Research_paper_systems_implementation.dice_system_implementation.field.dice_field_value import DiceRealFieldValue
+from Research_paper_systems_implementation.dice_system_implementation.field.dice_real_field import DiceRealField
+from Research_paper_systems_implementation.dice_system_implementation.field.dice_real_single_field_value import \
+    DiceRealSingleFieldValue
+from Research_paper_systems_implementation.dice_system_implementation.field.dice_single_field_value_addition import \
+    DiceFieldValueAddition
+from Research_paper_systems_implementation.dice_system_implementation.field.dice_single_field_value_norm import \
+    DiceFieldValueNorm
 from Research_paper_systems_implementation.dice_system_implementation.state.dice_multi_step_reaching import \
     DiceMultiStepReaching
 from Research_paper_systems_implementation.dice_system_implementation.state.dice_reachable import DiceReachable
@@ -43,4 +51,29 @@ print("Reaching Space: ",dice_reaching.get_reaching(mu_0))
 dice_multi_step_reaching = DiceMultiStepReaching(ALPHA,N_0,D)
 multi_step_reaching_space = dice_multi_step_reaching.get_multi_step_reaching(mu_0,1)
 print("Multi Step Reaching space",multi_step_reaching_space)
+
+# -------- Dice Single Field Value ------------#
+
+dice_single_field_value = DiceRealSingleFieldValue(1)
+print("Dice Single Field Value: ",dice_single_field_value)
+
+# ---------- Dice Field Value ---------------#
+
+DiceRealFieldValue.configure(DiceFieldValueNorm(),DiceFieldValueAddition())
+
+dice_real_field_value = DiceRealFieldValue(DiceRealSingleFieldValue(2))
+dice_real_field_value2 = DiceRealFieldValue(DiceRealSingleFieldValue(1))
+print("Dice real Field Value: ",dice_real_field_value.data)
+print("Dice real Field Value Zero", dice_real_field_value.get_zero_field().data)
+print("Dice real Field Value One", dice_real_field_value.get_unitary_field().data)
+print("2+1: ",dice_real_field_value2.addition(dice_real_field_value).data)
+
+#-------------Dice Field -------------------#
+
+dice_field= DiceRealField(DiceStateSpace(mu_0,D))
+dice_field.plot_field()
+dice_field.set_field_function()
+dice_field.plot_field()
+
+
 

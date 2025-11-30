@@ -7,9 +7,6 @@ from fds.core.fds_field.single_field_value import SingleFieldValue
 from fds.core.fds_field.single_field_value_composition import AdditionComposition
 from fds.core.fds_field.single_field_value_transform import NormTransform
 
-# assume these exist in your project
-# from .single_field_value import SingleFieldValue
-# from .field_ops import NormTransform, AdditionComposition
 
 ArrayLike = Union[np.ndarray, float, int]
 
@@ -27,6 +24,15 @@ class FieldValue:
 
     DEFAULT_NORM: ClassVar["NormTransform"] =None  # set below via configure() or subclass
     DEFAULT_ADD: ClassVar["AdditionComposition"] = None
+
+    def __post_init__(self):
+        # Assign the CLASS defaults to the INSTANCE attributes if they were not provided.
+        # This assumes DiceRealFieldValue.configure() has been called before instantiation.
+        if self.normTransform is None and self.DEFAULT_NORM is not None:
+            self.normTransform = self.DEFAULT_NORM
+
+        if self.additionComposition is None and self.DEFAULT_ADD is not None:
+            self.additionComposition = self.DEFAULT_ADD
 
     # ---- configuration helpers ----
     @classmethod
@@ -136,3 +142,8 @@ class FieldValue:
 
 
     def get_value(self):return self.data.value
+
+
+
+
+

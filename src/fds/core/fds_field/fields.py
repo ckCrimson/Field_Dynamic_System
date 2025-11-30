@@ -21,19 +21,19 @@ class Field(Generic[S]):
         self._unit = unit_field.get_unitary_field()
         self.field_function = field_function
         self._values: dict[S, FieldValue] = {}
-        self.set_empty_field()
         self.constant_field=self._unit
         self._zero_value = self._unit.get_zero_field()
         self.constant_indicator=False
+        self.set_empty_field()
 
     def get_field(self, state: S) :
         """Return the FieldValue at the given state."""
-        if state in self._values:
-            return self._values[state]
         if self.field_function is not None:
             if self.constant_indicator:
                 return self.constant_field
             return self.field_function.get_field_at(state)
+        if state in self._values:
+            return self._values[state]
 
     def get_unit_field(self) -> FieldValue:
         return self._unit
@@ -133,3 +133,8 @@ class Field(Generic[S]):
         un =self._unit
         zer = self._zero_value
         self.set_constant_field_at_all_except_input(inp_state,zer, un)
+
+    def set_field_function(self, field_function: FieldFunction = None):
+        self.constant_indicator = False
+        if field_function is not None:
+            self.field_function = field_function
