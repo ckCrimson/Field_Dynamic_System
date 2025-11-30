@@ -16,7 +16,6 @@ class StateSpaceMapping(ABC, Generic[Sin, Sout]):
     def __init__(self, mapping_reverse: Optional['StateSpaceMapping[Sout, Sin]'] = None):
         self.mapping_reverse = mapping_reverse
 
-    @abstractmethod
     def get_mapping(self, state_in: Sin, stateSpaceOut : StatSpace[Sout]) -> StatSpace[Sout]:
         """Map a single state to a state-space of output states."""
         pass

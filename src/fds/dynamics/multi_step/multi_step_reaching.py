@@ -134,8 +134,8 @@ class MultiStepReaching(Generic[S]):
     def get_reaching(
             self,  # keep your method shape
             initial_state: S,
-            reference_space,  # prototype DiscreteFiniteStatSpace
             l: int,
+            reference_space,
             get_reaching_from_allowed: bool = False,
     ):
         """

@@ -33,7 +33,7 @@ class StatSpace(Generic[S],ABC):
     def size(self) -> int:
         ...
 
-    @abstractmethod
+
     def ids_view(self) -> np.ndarray:
         """Contiguous int32 vector aligned to the universe: [0..N-1] or a stable view."""
         ...
@@ -46,8 +46,8 @@ class StatSpace(Generic[S],ABC):
             yield int(ids[i])
 
     # ---- ergonomic/compat (slow/materializing) ----
-    @abstractmethod
-    def get_all_states(self) -> Iterable[S]:
+
+    def get_all_states(self) -> Any:
         """Lazy iterable over actual State objects. Fine for small N / debug; not for hot loops."""
         ...
 
@@ -56,11 +56,11 @@ class StatSpace(Generic[S],ABC):
     def contains(self, s: S) -> bool:
         ...
 
-    @abstractmethod
+
     def get_id(self, s: S) -> int:
         ...
 
-    @abstractmethod
+
     def get_state_by_id(self, sid: int) -> S:
         ...
 
@@ -79,9 +79,11 @@ class StatSpace(Generic[S],ABC):
         return 1
 
     # ---- set algebra (optional to implement now) ----
+    @abstractmethod
     def union_state_space(self, other: "StatSpace[S]") -> "StatSpace[S]":
         raise NotImplementedError
 
+    @abstractmethod
     def intersection_state_space(self, other: "StatSpace[S]") -> "StatSpace[S]":
         raise NotImplementedError
 
@@ -314,8 +316,8 @@ class DiscreteInfiniteStateSpace(DiscreteSpace, StatSpace[S], ABC):
 class ContinuousFiniteStateSpace(ContinuousSpace, StatSpace[S], ABC):
     """Usually rare; if truly finite, you can still store a frozenset like above."""
     # implement similarly to DiscreteFiniteStateSpace if needed
-    @abstractmethod
-    def build_state_space(self, *args, **kwargs) -> Iterator[S]:
+    @classmethod
+    def build_state_space(self, *args, **kwargs):
         '''Needs to be implemented by all subclasses to build the state space'''
 
 
