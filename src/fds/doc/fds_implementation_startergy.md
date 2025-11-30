@@ -421,6 +421,11 @@ The dynamic module turns static objects (states & fields) into actual **evolutio
   * `Reachable`,
   * optional `HookingBias` and `KernelFieldComposition`,
   * possibly global fields.
+* **Important Components**
+  * `get(s, s')` → FieldValue
+  * Combines kernel, bias, global fields
+  * Used as Fₜ(s' : s)
+
 * **Responsibilities:**
 
   * For a given state `s`, and each `s' ∈ V[s]`, provide a `FieldValue` representing the **single-step contribution** towards `s'`.
@@ -442,6 +447,14 @@ This is the “one-step physics” of your system.
   * `FieldComposition` (internal),
   * `FieldTransform` (for `Z^p`, `Z^t`, `Z^c`).
 * **Responsibilities:**
+
+* **Important Components**
+  * `init_step(s0)` → F⁰
+  * Zᵖ,Zᵗ,Zᶜ, Single Step Field Transform, Multi Step Field Transform, Global Field Transform,
+  *  `compute_next(F_prev)` → Fˡ
+  *   Implements chain-rule recurrence:
+    * Accumulation step
+    * Finalization step
 
   * Implement the generalized chain-rule recurrence (conceptually):
 
@@ -520,6 +533,11 @@ Now we wrap the pieces into **Dynamic System objects** that a user can actually 
 * **Use:**
 
   * Useful when you want to reason about reachability and paths without committing to a field structure (e.g., for graph exploration).
+* **Important Components**
+  * `state_space`
+  * `reachable`
+  * `multistep_reaching`
+  * No fields involved
 
 ---
 
@@ -532,6 +550,10 @@ Now we wrap the pieces into **Dynamic System objects** that a user can actually 
 * **Includes:**
 
   * `Field` and core field machinery.
+
+* **Important Components**
+  * `field` metadata
+  * Field lookup methods
 * **Use:**
 
   * For systems where you want fields but either:
@@ -558,6 +580,13 @@ Now we wrap the pieces into **Dynamic System objects** that a user can actually 
     * initialize from an initial state (and maybe initial global fields),
     * step / evolve for `ℓ` steps,
     * query paths, multi-step fields, and distributions.
+   
+*  **Important Components**
+ *  `multistep_field`
+ *   `operator`
+ *    `evolve_l_steps(l)`
+ *    `initialize(s0)`
+ *     Backbone object used everywhere
 * **Usage pattern:**
 
   * Most users will only interact with `FieldDynamicSystem` (or higher-level wrappers built on top of it).
