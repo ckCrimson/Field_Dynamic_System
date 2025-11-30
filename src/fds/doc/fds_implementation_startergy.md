@@ -605,6 +605,7 @@ We now go module-by-module.
 
 This module defines how to represent groups of systems that influence each other.
 
+
 #### 4.1.1 `AffectingGroupState` `[O]`
 
 * **What it is:** Optional specialized `State` representing the **joint state** of an affecting group.
@@ -612,6 +613,10 @@ This module defines how to represent groups of systems that influence each other
 
   * A tuple of per-system states,
   * plus extra metadata (like shared conserved quantities).
+* **Important Components**
+  * Container for grouped system states
+  * Must be hashable and comparable
+  * Supports system → state mapping
 * **Use:**
 
   * When you want a custom representation of group state beyond the default correlated state.
@@ -627,6 +632,11 @@ This module defines how to represent groups of systems that influence each other
 * **Includes:**
 
   * `AffectingGroupState` as its atomic element type.
+
+* **Important Components**
+  * Internal dictionary: `{sys_id: state}`
+  * Fast lookup for each system
+  * Used if no custom AffectingGroupState is provided
 * **Use:**
 
   * When you want explicit control over the space of group states (e.g. restrictions, constraints).
@@ -642,6 +652,11 @@ This module defines how to represent groups of systems that influence each other
 * **Internal representation (conceptual):**
 
   * A mapping `sys_id → state_of_that_system`.
+* Important Components
+  * Internal dictionary: `{sys_id: state}`
+  * Fast lookup for each system
+  * Used if no custom AffectingGroupState is provided
+
 * **Role:**
 
   * First layer to identify groups of affecting systems and their collective state, even if the user does not define a custom `AffectingGroupState`.
@@ -654,6 +669,9 @@ This module defines how to represent groups of systems that influence each other
 * **Extends:**
 
   * `StateSpace`.
+* **Important Components**
+  * Handles all correlated combinations
+  * Must integrate with AffectedSystemsMapping
 * **Use:**
 
   * As the canonical space of joint states for a collection of systems,
@@ -667,6 +685,11 @@ This module defines how to represent groups of systems that influence each other
 * **Extends:**
 
   * `StateSpaceMapping`,
+* **Important Components**
+  *  `map_state(correlated_state)` → affecting_group_state
+  *  Optional: inverse mapping
+  *  Essential for interpreting grouped systems
+
 * **Includes:**
 
   * `CorrelatedStateSpace`.
@@ -687,6 +710,10 @@ This module answers: *Which systems affect which others?* and *How do we group t
 * **Responsibilities:**
 
   * Given two `FieldDynamicSystem`s, decide if they are in an affecting relationship (and possibly in which direction).
+*  **Important Components**
+  *  `check(sys1, sys2)` → Boolean or direction
+  *  Must work across heterogeneous systems
+  *  
 * **Implementation options:**
 
   * Hard-coded rules,
@@ -702,6 +729,12 @@ This module answers: *Which systems affect which others?* and *How do we group t
 
   * `IsAffecting`,
   * `AffectedSystemsMapping`.
+ 
+*  **Important Components**
+  *  `build_groups(system_list)` → list of groups
+  *  Produces correlation/group state spaces
+  *  Used by AffectingGroupsEvolution
+    
 * **Responsibilities:**
 
   * From a list/set of `FieldDynamicSystem`s, build:
@@ -727,6 +760,12 @@ Now we lift the concepts of `Reachable`, `Reaching`, and `MultiStepReaching` to 
 
   * `AffectingGroupStateSpace`,
   * `AffectingGroupState`.
+ 
+* ** Important Components**
+  * `get(group_state)`
+  * Combines transitions of all member systems
+  * Applies affecting logic
+
 * **Responsibilities:**
 
   * Given a group state, compute the set of **next group states** reachable in one step, respecting:
@@ -742,6 +781,11 @@ Now we lift the concepts of `Reachable`, `Reaching`, and `MultiStepReaching` to 
 * **Extends:**
 
   * `Reaching`.
+ 
+* **Important Components**
+ *  `get_reaching(group_state)`
+ *   Needed for chain-rule recurrence at group level
+
 * **Includes:**
 
   * `AffectingGroupStateSpace`,
@@ -759,6 +803,11 @@ Now we lift the concepts of `Reachable`, `Reaching`, and `MultiStepReaching` to 
 * **Extends:**
 
   * `MultiStepReaching`.
+ 
+* **Important Components**
+  *  `compute_layers(group_state, l)`
+  *  Drives group evolution frontier
+    
 * **Includes:**
 
   * `AffectedReachable`,
@@ -779,6 +828,9 @@ These are the **dynamic counterparts** in the affecting setting.
 * **Extends:**
 
   * `SingleStepField`.
+* **Important Components**
+  *  `get(group_state, next_group_state)`
+  *  Combines correlated transitions
 * **Role:**
 
   * Given a current group state (across multiple systems), build the **single-step joint field** that encodes how the whole group moves in one step.
@@ -791,6 +843,10 @@ These are the **dynamic counterparts** in the affecting setting.
 * **Extends:**
 
   * `MultiStepField`.
+ 
+*  **Important Components**
+  *   Same structure as MultiStepField
+  *   Uses affecting reachability
 * **Role:**
 
   * Apply the generalized chain-rule recurrence to **group states** using `AffectingSingleStep` and `AffectingMultiStepReaching`.
@@ -803,6 +859,9 @@ These are the **dynamic counterparts** in the affecting setting.
 * **Extends:**
 
   * `Operator` (or the operator concept used in base `FieldDynamicSystem`).
+*  **Important Components**
+  *  `apply(F_l_group)` → next group observable
+  *  Produces system-level and group-level evolution data
 * **Responsibilities:**
 
   * Given an affecting group (and its multi-step field), produce:
@@ -833,6 +892,14 @@ This is the **full object** for affected systems: the counterpart of `FieldDynam
   * `AffectingMultiStepReaching`,
   * `AffectingSingleStep` / `AffectingMultiStepField`,
   * `AffectedSystemsOperator`.
+ 
+* **Important Components**
+  * `affected_reachable`
+  * `affecting_multistep_reaching`
+  *  `affecting_multistep_field`
+  *  `affected_operator`
+  *  
+- High-level API to evolve correlated systems
 * **Responsibilities:**
 
   * Provide a high-level interface to:
@@ -855,6 +922,11 @@ In practice, this is what you instantiate when you want to **simulate or analyze
 
   * `InterAffectingGroups`.
 * **Responsibilities:**
+
+* **Important Components**
+  *  Maintains list of systems
+  *  Builds affecting groups
+  *  Evolve all groups and return trajectories
 
   * Given a collection of `FieldDynamicSystem`s:
 
@@ -895,6 +967,12 @@ This is where you can run different “views” or “routes” of interaction a
     * step each `AffectingGroupsEvolution` according to some logic (synchronous or custom),
     * gather results (e.g., trajectories, distributions) from each channel,
     * optionally compare or aggregate channel outcomes (e.g., averaging, voting, diagnostics).
+   
+* **Important Components**
+  * `apply(all_groups)` → combined observable
+  * Handles inter-channel logic
+  * Delegates within channels to their respective evolution objects
+
 
 You can think of `EnsembleOperator` as a controller that runs many different “what if” configurations side by side.
 
@@ -914,6 +992,15 @@ You can think of `EnsembleOperator` as a controller that runs many different “
     * initialize it with an *empty* list of `FieldDynamicSystem` but with all other required components (grouping logic, mapping, etc.),
     * register or attach the relevant `FieldDynamicSystem`s to that channel.
   * Pass the list of `AffectingGroupsEvolution` into the `Ensemble` along with the base systems.
+ 
+* **Important Components**
+  * Holds:
+     *  list of FieldDynamicSystems
+     *  list of AffectingGroupsEvolution (one per channel)
+     *  EnsembleOperator instance
+  *  `initialize_channels()`
+  *  `evolve(l)` → evolves all channels
+  *  `get_results()` → channel-wise outputs
 * **Responsibilities:**
   * Hold:
     * the **universe of systems** you care about (`FieldDynamicSystem` list),
