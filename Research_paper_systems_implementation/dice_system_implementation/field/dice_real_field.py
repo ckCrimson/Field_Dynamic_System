@@ -14,7 +14,7 @@ from fds import Field
 class DiceRealField(Field):
 
     def __init__(self, state_space: DiceStateSpace,unit_field: DiceRealFieldValue=None , field_function: GaussianFieldFunction=None,
-                 mean: float = None, variance : float = None):
+                 mean: float = None, variance : float = None,set_field_funtion:bool=False):
         unit_field= DiceRealFieldValue(DiceRealSingleFieldValue(1))
         if mean is None:
             mean = 3.5

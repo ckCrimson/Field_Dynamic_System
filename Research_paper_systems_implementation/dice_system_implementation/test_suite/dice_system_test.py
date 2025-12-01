@@ -1,3 +1,5 @@
+from Research_paper_systems_implementation.dice_system_implementation.dynamics.single_step.single_step_field_generator import \
+    DiceSingleStepFieldGenerator
 from Research_paper_systems_implementation.dice_system_implementation.field.dice_field_value import DiceRealFieldValue
 from Research_paper_systems_implementation.dice_system_implementation.field.dice_real_field import DiceRealField
 from Research_paper_systems_implementation.dice_system_implementation.field.dice_real_single_field_value import \
@@ -71,9 +73,11 @@ print("2+1: ",dice_real_field_value2.addition(dice_real_field_value).data)
 #-------------Dice Field -------------------#
 
 dice_field= DiceRealField(DiceStateSpace(mu_0,D))
-dice_field.plot_field()
-dice_field.set_field_function()
-dice_field.plot_field()
 
+#--------------- Dice Single Step --------------#
+
+dice_single_step_generator = DiceSingleStepFieldGenerator(alpha=ALPHA,n_0=N_0,dice_number=D)
+sigle_step_field = dice_single_step_generator.build_single_step_field(mu_0,dice_field)
+sigle_step_field.plot_field()
 
 
