@@ -1,3 +1,7 @@
+from Research_paper_systems_implementation.dice_system_implementation.dynamics.multi_step.multi_step_field_generator import \
+    DiceMultiStepFieldGenerator
+from Research_paper_systems_implementation.dice_system_implementation.dynamics.operator.dice_operator import \
+    DiceOperator
 from Research_paper_systems_implementation.dice_system_implementation.dynamics.single_step.single_step_field_generator import \
     DiceSingleStepFieldGenerator
 from Research_paper_systems_implementation.dice_system_implementation.field.dice_field_value import DiceRealFieldValue
@@ -78,6 +82,17 @@ dice_field= DiceRealField(DiceStateSpace(mu_0,D))
 
 dice_single_step_generator = DiceSingleStepFieldGenerator(alpha=ALPHA,n_0=N_0,dice_number=D)
 sigle_step_field = dice_single_step_generator.build_single_step_field(mu_0,dice_field)
-sigle_step_field.plot_field()
+#sigle_step_field.plot_field("Single Step Field")
 
+#---------------Multi Step Field----------------#
+
+dice_multi_step_field_generator = DiceMultiStepFieldGenerator(alpha=ALPHA,n_0=N_0,dice_number=D)
+multi_step_dice_field = dice_multi_step_field_generator.generate_multi_step_field(dice_space,mu_0,2)
+#multi_step_dice_field.plot_field("Multi Step Field")
+
+#--------- Dice Random Operator ------------------#
+
+dice_operator = DiceOperator()
+new_state = dice_operator.get_next_state(multi_step_dice_field)
+print(f"prev_state:{mu_0} ---> new_state:{new_state}")
 

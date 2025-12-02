@@ -19,7 +19,7 @@ class DiceMultiStepReaching(MultiStepReaching):
     def get_multi_step_reaching(
             self,
             initial_state: DiceState,
-            l: int=None,
+            l: int=1,
             reference_space=None,
             *,
             csr: Optional[Tuple[np.ndarray, np.ndarray]] = None,  # (indptr, indices)

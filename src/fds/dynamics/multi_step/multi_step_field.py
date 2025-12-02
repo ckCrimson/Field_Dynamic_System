@@ -68,11 +68,11 @@ class MultiStepField(Generic[S]):
         self,
         reachable: Reachable[S],
         single_step: "SingleStepField[S]",
-        intrinsic_composer: "ComposeField",   # Z^P  (combine parent value with step field)
-        extrinsic_composer: "ComposeField",   # Z^t  (accumulate contributions from different parents)
-        global_field_transform: "TransformField",  # optional transform of global field each step
-        single_step_transform: "TransformField",   # transform for the single-step field
-        multi_step_transform: "TransformField"     # transform for the multi-stepped field
+        intrinsic_composer: "ComposeField"=None,   # Z^P  (combine parent value with step field)
+        extrinsic_composer: "ComposeField"=None,   # Z^t  (accumulate contributions from different parents)
+        global_field_transform: "TransformField"=None,  # optional transform of global field each step
+        single_step_transform: "TransformField"=None,   # transform for the single-step field
+        multi_step_transform: "TransformField"=None     # transform for the multi-stepped field
     ):
         self.reachable = reachable
         self.single_step = single_step

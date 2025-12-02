@@ -104,7 +104,7 @@ class Field(Generic[S]):
         returnField.set_constant(field_value)
         return returnField
 
-    def plot_field(self):
+    def plot_field(self,*args,**kwargs) -> None:
         """A method which can be implemented to plot the field if possible"""
 
     def set_unit_field_at_state(self,inp_state:State):

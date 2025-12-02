@@ -23,11 +23,13 @@ class DiceRealField(Field):
         field_function =GaussianFieldFunction(mean=mean, variance=variance)
         super().__init__(state_space, unit_field,field_function)
 
-    def plot_field(self):
+    def plot_field(self,title="",**kwargs) -> None:
         lower =self.state_space.lower_limit
         upper = self.state_space.upper_limit
 
         x_axis = np.linspace(lower,upper,100)
         y_axis = np.array([self.get_field(DiceState(x)).data.value for x in x_axis])
-        plt.plot(x_axis,y_axis);plt.show()
+        plt.axvline((lower+upper)/2, color='r', linestyle='--',label=f" $ \mu $ = {(lower+upper)/2}")
+        leg=plt.legend()
+        plt.plot(x_axis,y_axis);plt.title(title);plt.show()
 
