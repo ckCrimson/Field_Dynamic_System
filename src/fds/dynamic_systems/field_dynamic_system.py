@@ -64,7 +64,7 @@ class FieldDynamicSystem(FieldStaticDynamicSystem[S], Generic[S]):
         self.system_global_field = init.system_global_field
 
     @abstractmethod
-    def multi_step_field_generator(self, steps:integer, curr_state: None ,**params) -> Field:
+    def multi_step_field_generator(self, steps:integer, curr_state: State=None ,**params) -> Field:
         """Gnertates the a multi step field and and returns the multi-step field"""
 
     def save_multi_step_field(

@@ -15,7 +15,7 @@ class DiceState(State):
     def __abs__(self):
         return self.state
     def __hash__(self):
-        return self.state
+        return hash(self.state)
     def __repr__(self):
         return f"DiceState({self.state})"
     def __str__(self):

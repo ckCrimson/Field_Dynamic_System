@@ -1,3 +1,5 @@
+from Research_paper_systems_implementation.dice_system_implementation.dynamic_system.dice_fielld_dynamic_system import \
+    DiceFieldDynamicSystem
 from Research_paper_systems_implementation.dice_system_implementation.dynamics.multi_step.multi_step_field_generator import \
     DiceMultiStepFieldGenerator
 from Research_paper_systems_implementation.dice_system_implementation.dynamics.operator.dice_operator import \
@@ -20,9 +22,9 @@ from Research_paper_systems_implementation.dice_system_implementation.state.dice
 from Research_paper_systems_implementation.dice_system_implementation.state.dice_state_space import DiceStateSpace
 
 # ---------------Constants --------------------#
-ALPHA = 2
-N_0=10
-D=6
+ALPHA = 25
+N_0=100
+D=69
 # --------- State ---------------#
 
 mu_0 = DiceState(1.2)
@@ -96,3 +98,15 @@ dice_operator = DiceOperator()
 new_state = dice_operator.get_next_state(multi_step_dice_field)
 print(f"prev_state:{mu_0} ---> new_state:{new_state}")
 
+#------------- Dice Field Dynamic System --------------#
+
+dice_field_dynamic_system = DiceFieldDynamicSystem(initial_state=mu_0,alpha=ALPHA,N_0=N_0,dice_number=D)
+print(dice_field_dynamic_system)
+#dice_field_dynamic_system.field.plot_field("Dice FDS initial field")
+#dice_field_dynamic_system.multi_step_field_generator(2).plot_field("Dice FDS 2 step generated field")
+#dice_field_dynamic_system.save_multi_step_field(5)
+#dice_field_dynamic_system.field.plot_field("Saved field of the system")
+dice_field_dynamic_system.evolve_multiple_times(number_of_iteration=100,steps=2)
+dice_field_dynamic_system.plot_evolution()
+
+#-------------- End of the Line ----------------#
