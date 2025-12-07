@@ -281,197 +281,70 @@ Stores:
 
 ```mermaid
 classDiagram
-    %% ======================
-    %% CORE / STATIC MODULE
-    %% ======================
-    class State {
-      <<core>>
-    }
 
-    class StateSpace {
-      <<core>>
-    }
-
-    class Reachable {
-      <<core>>
-    }
-
+    %% =========================
+    %% State / Reachability layer
+    %% =========================
+    class State
+    class StateSpace
+    class Reachable
     class MultiStepReaching {
-      <<core>>
+        <<helper>>
     }
 
-    class SingleFieldValue {
-      <<core>>
-    }
+    StateSpace *-- "many" State : contains
+    Reachable ..> StateSpace : queries
+    MultiStepReaching ..> Reachable : builds multi-step info
 
-    class FieldValue {
-      <<core>>
-    }
+    %% =========================
+    %% Field value & algebra layer
+    %% =========================
+    class SingleFieldValue
+    class FieldValue
+    class Composition
+    class Transform
+    class Addition
+    class NormTransform
 
-    class Field {
-      <<core>>
-    }
+    FieldValue *-- SingleFieldValue : value
+    FieldValue *-- Composition : compositionOp
+    FieldValue *-- Transform   : normOp
 
-    class FieldTransform {
-      <<core>>
-    }
+    Composition <|-- Addition
+    Transform   <|-- NormTransform
 
-    class FieldComposition {
-      <<core>>
-    }
+    %% =========================
+    %% Field / kernels / step fields
+    %% =========================
+    class Field
+    class Kernel
+    class SingleStepField
+    class MultiStepField
 
-    StateSpace "1" o-- "*" State
-    Reachable --> State
-    Reachable --> StateSpace
-    MultiStepReaching --> Reachable
-    FieldValue --> SingleFieldValue
-    Field --> FieldValue
-    Field --> StateSpace
-    FieldTransform --> Field
-    FieldComposition --> Field
+    Field *-- FieldValue : values
 
-    %% ======================
-    %% DYNAMIC MODULE
-    %% ======================
-    class Kernel {
-      <<dynamic>>
-    }
+    Kernel *-- Field          : usesField
+    SingleStepField *-- Field : stepFieldOver
+    MultiStepField *-- Field  : stepFieldOver
+    Field *-- StateSpace : values
+    SingleStepField *-- Kernel : uses
+    %% =========================
+    %% Dynamic system & operators
+    %% =========================
+    class FieldDynamicSystem
+    class Operator
 
-    class SingleStepField {
-      <<dynamic>>
-    }
+    %% FDS USES Field to define probabilities (not owning it)
+    FieldDynamicSystem ..> Field : definesProbabilitiesWith
 
-    class MultiStepField {
-      <<dynamic>>
-    }
+    %% Reachability helpers for FDS
+    FieldDynamicSystem ..> Reachable
+    FieldDynamicSystem ..> MultiStepField
 
-    Kernel --> State
-    Kernel --> FieldValue
+    %% Optional operator & kernel-style components
+    FieldDynamicSystem ..> Operator : «uses»
 
-    SingleStepField --> Kernel
-    SingleStepField --> Reachable
-    SingleStepField --> Field
 
-    MultiStepField --> SingleStepField
-    MultiStepField --> FieldComposition
-    MultiStepField --> FieldTransform
-    MultiStepField --> MultiStepReaching
+    Operator ..> Field  : actsOn
 
-    %% ======================
-    %% DYNAMIC SYSTEMS MODULE
-    %% ======================
-    class StaticDynamicSystem {
-      <<system>>
-    }
-
-    class FieldStaticDynamicSystem {
-      <<system>>
-    }
-
-    class FieldDynamicSystem {
-      <<system>>
-    }
-
-    StaticDynamicSystem --> StateSpace
-    StaticDynamicSystem --> Reachable
-    StaticDynamicSystem --> MultiStepReaching
-
-    FieldStaticDynamicSystem --|> StaticDynamicSystem
-    FieldStaticDynamicSystem --> Field
-
-    FieldDynamicSystem --|> FieldStaticDynamicSystem
-    FieldDynamicSystem --> MultiStepField
-
-    %% ======================
-    %% AFFECTING FRAMEWORK
-    %% ======================
-    class CorrelatedState {
-      <<affecting>>
-    }
-
-    class CorrelatedStateSpace {
-      <<affecting>>
-    }
-
-    class AffectingGroupState {
-      <<affecting>>
-    }
-
-    class AffectingGroupStateSpace {
-      <<affecting>>
-    }
-
-    class AffectedSystemsMapping {
-      <<affecting>>
-    }
-
-    class AffectedReachable {
-      <<affecting>>
-    }
-
-    class AffectingMultiStepReaching {
-      <<affecting>>
-    }
-
-    class AffectingSingleStep {
-      <<affecting>>
-    }
-
-    class AffectingMultiStepField {
-      <<affecting>>
-    }
-
-    class AffectedSystemsOperator {
-      <<affecting>>
-    }
-
-    class AffectingFDS {
-      <<affecting>>
-    }
-
-    CorrelatedState --|> State
-    CorrelatedStateSpace --|> StateSpace
-    AffectingGroupState --|> State
-    AffectingGroupStateSpace --|> StateSpace
-
-    AffectedSystemsMapping --> CorrelatedStateSpace
-    AffectedSystemsMapping --> AffectingGroupStateSpace
-
-    AffectedReachable --|> Reachable
-    AffectingMultiStepReaching --|> MultiStepReaching
-
-    AffectingSingleStep --|> SingleStepField
-    AffectingMultiStepField --|> MultiStepField
-    AffectedSystemsOperator --> AffectingMultiStepField
-
-    AffectingFDS --|> FieldDynamicSystem
-    AffectingFDS --> AffectingGroupState
-    AffectingFDS --> AffectingGroupStateSpace
-    AffectingFDS --> AffectedSystemsMapping
-    AffectingFDS --> AffectedReachable
-    AffectingFDS --> AffectingMultiStepReaching
-    AffectingFDS --> AffectedSystemsOperator
-
-    %% ======================
-    %% ENSEMBLE MODULE (STUB)
-    %% ======================
-    class EnsembleOperator {
-      <<ensemble>>
-      + channels : List[AffectingGroupsEvolution]
-      + stepAll()
-      + collectResults()
-    }
-
-    class Ensemble {
-      <<ensemble>>
-      + systems : List[FieldDynamicSystem]
-      + channels : List[AffectingGroupsEvolution]
-      + operator : EnsembleOperator
-      + run()
-    }
-
-    Ensemble --> FieldDynamicSystem
-    EnsembleOperator --> Ensemble
-    MappingRegister --> Ensemble
-    MappingRegister --> FieldDynamicSystem
 
