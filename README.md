@@ -329,6 +329,8 @@ classDiagram
     SingleStepField ..> Kernel : uses
     SingleStepField *-- Field : stepFieldOver
     MultiStepField  *-- Field : stepFieldOver
+    MultiStepField  *-- Reachable : builds multi_step_space
+    MultiStepField  *-- SingleStepField : builds multi_step_space
 
     %% =========================
     %% Dynamic system & operators
@@ -351,6 +353,8 @@ classDiagram
 
     %% Operator acts on field produced by MultiStepField
     Operator ..> MultiStepField  : actsOn
+
+
 
 
 
