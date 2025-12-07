@@ -289,7 +289,8 @@ classDiagram
     class StateSpace
     class Reachable
     class MultiStepReaching {
-        <<helper>>
+        <<helper,optional>>
+        
     }
 
     StateSpace *-- "many" State : contains
@@ -322,29 +323,34 @@ classDiagram
     class MultiStepField
 
     Field *-- FieldValue : values
+    Field ..> StateSpace : over
 
-    Kernel *-- Field          : usesField
+    Kernel ..> Field          : usesField
+    SingleStepField ..> Kernel : uses
     SingleStepField *-- Field : stepFieldOver
-    MultiStepField *-- Field  : stepFieldOver
-    Field *-- StateSpace : values
-    SingleStepField *-- Kernel : uses
+    MultiStepField  *-- Field : stepFieldOver
+
     %% =========================
     %% Dynamic system & operators
     %% =========================
     class FieldDynamicSystem
-    class Operator
+    class Operator {
+        
+    }
 
     %% FDS USES Field to define probabilities (not owning it)
     FieldDynamicSystem ..> Field : definesProbabilitiesWith
 
     %% Reachability helpers for FDS
     FieldDynamicSystem ..> Reachable
-    FieldDynamicSystem ..> MultiStepField
+    FieldDynamicSystem ..> MultiStepReaching
+    FieldDynamicSystem ..> MultiStepField : uses
 
-    %% Optional operator & kernel-style components
-    FieldDynamicSystem ..> Operator : «uses»
+    %% Optional operator
+    FieldDynamicSystem ..> Operator : uses
 
+    %% Operator acts on field produced by MultiStepField
+    Operator ..> MultiStepField  : actsOn
 
-    Operator ..> Field  : actsOn
 
 
