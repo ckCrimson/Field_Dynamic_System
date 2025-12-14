@@ -30,7 +30,8 @@ class FieldDynamicSystem(FieldStaticDynamicSystem[S], Generic[S]):
                  operator: Operator[S], transition_list: list[S]=None,state_space: StatSpace[S] = None,
                  reaching: Reaching[S]=None,
                  system_global_field: Optional[Field[S]] = None, own_produced_field: Optional[Field[S]] = None,
-                 build_from_reachable = False,within_state_space = False, multi_step_reaching: MultiStepReaching=None) -> None:
+                 build_from_reachable = False,within_state_space = False, multi_step_reaching: MultiStepReaching=None
+                 ) -> None:
         super().__init__(initial_state,state_space, reachable, field,reaching,multi_step_reaching,system_global_field,own_produced_field)
         self.multi_step_field = multi_step_field
        # self.pdf_field = pdf_field
@@ -69,10 +70,12 @@ class FieldDynamicSystem(FieldStaticDynamicSystem[S], Generic[S]):
         raise NotImplementedError("Multi-step field generator not implemented.")
 
     def save_multi_step_field(
-        self, steps:integer, **params
+        self, steps:integer, state: State = None,**params
     ):
         if self.repition:
-            self.field=self.multi_step_field_generator(steps, **params)
+            if state is None:
+                state = self.initial_state
+            self.field=self.multi_step_field_generator(steps,state, **params)
             self.repition  = False
 
     def evolve(self,steps: integer, **params):
@@ -88,3 +91,9 @@ class FieldDynamicSystem(FieldStaticDynamicSystem[S], Generic[S]):
         self.initial_state =   (self.transition_list[-1])
         self.field.set_field(self.transition_list[-1],self.field.get_unit_field())
         self.repition = True
+
+    def multi_iteration_evolution(self, iterations: int =1, each_iteration_steps: int=1):
+        for _ in range(iterations):
+            self.evolve(each_iteration_steps)
+
+
