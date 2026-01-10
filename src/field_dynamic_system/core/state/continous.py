@@ -2,11 +2,13 @@
 Geometric State Space Definitions (Continuous Module).
 Implements Constructive Solid Geometry (CSG) for physical manifolds.
 """
+import dataclasses
 from abc import ABC, abstractmethod
 from typing import Union, Sequence, Any
 from enum import Enum
 from dataclasses import dataclass
 import jax.numpy as jnp
+from jax._src.tree_util import register_pytree_node
 
 from .interfaces import StateSpace, StateEncoder, IDiscreteStateSpace, IContinuousStateSpace
 from .state import State
@@ -55,6 +57,67 @@ class ContinuousStateSpace(IContinuousStateSpace, ABC):
     # Standard Protocol Implementation
     def validate(self, raw_data: jnp.ndarray) -> jnp.ndarray:
         return self.project(raw_data)
+
+    def __init_subclass__(cls, **kwargs):
+        """
+        AUTOMAGIC: Every time a user creates a subclass, this runs.
+        It automatically registers the new class as a JAX Pytree.
+        """
+        super().__init_subclass__(**kwargs)
+
+        # Only register if it's a dataclass (standard way users will define spaces)
+        if dataclasses.is_dataclass(cls):
+            register_pytree_node(
+                cls,
+                cls._tree_flatten,
+                cls._tree_unflatten
+            )
+
+    @classmethod
+    def _tree_flatten(cls, instance):
+        """
+        Splits the object into Children (JAX arrays) and Aux (Static data).
+        Convention: Fields starting with '_' are Static. Others are Dynamic.
+        """
+        children = []
+        aux_data = []
+        aux_keys = []
+
+        # dynamic introspection of the dataclass fields
+        for field in dataclasses.fields(instance):
+            value = getattr(instance, field.name)
+            if field.name.startswith('_'):
+                # Private -> Static Metadata
+                aux_data.append(value)
+                aux_keys.append(field.name)
+            else:
+                # Public -> Dynamic JAX Array
+                children.append(value)
+
+        # We store keys to reconstruct correctly later
+        return tuple(children), (tuple(aux_data), tuple(aux_keys))
+
+    @classmethod
+    def _tree_unflatten(cls, aux, children):
+        """
+        Reconstructs the object.
+        """
+        aux_values, aux_keys = aux
+
+        # Create a dictionary of all arguments
+        kwargs = {}
+
+        # 1. Fill in dynamic children (public fields)
+        child_iter = iter(children)
+        for field in dataclasses.fields(cls):
+            if not field.name.startswith('_'):
+                kwargs[field.name] = next(child_iter)
+
+        # 2. Fill in static aux data (private fields)
+        for key, val in zip(aux_keys, aux_values):
+            kwargs[key] = val
+
+        return cls(**kwargs)
 
 
 # --- 3. The Optimized Leaf Node (Hypercube) ---

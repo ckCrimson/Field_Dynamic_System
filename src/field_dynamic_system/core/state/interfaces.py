@@ -90,6 +90,19 @@ class IContinuousStateSpace(StateSpace, Protocol):
         """Math Enforcement: Snap invalid values to the manifold."""
         ...
 
+@runtime_checkable
+class IStateOperation(Protocol):
+    """
+    Defines an operation to be performed on a State.
+    """
+    def __call__(self, state: State) -> Any:
+        """
+        The logic to apply.
+        NOTE: For VectorStates, 'state' might be a Batched Object
+        containing arrays instead of scalars. Write JAX-compatible math!
+        """
+        ...
+
 
 @runtime_checkable
 class IDiscreteStateSpace(StateSpace, Protocol):
@@ -131,3 +144,7 @@ class IDiscreteStateSpace(StateSpace, Protocol):
 
         # Case C: Single Object
         return state in self.allowed_states
+
+    def map(self, operation: IStateOperation):
+        pass
+

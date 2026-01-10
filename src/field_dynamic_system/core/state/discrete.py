@@ -1,5 +1,5 @@
 import jax.numpy as jnp
-from .interfaces import IDiscreteStateSpace, StateEncoder, StateSpace, State
+from .interfaces import IDiscreteStateSpace, StateEncoder, StateSpace, State, IStateOperation
 from .encoding import BitMaskingEncoding, VectorEncoding
 from .state import VectorState, AbstractState
 
@@ -13,17 +13,14 @@ class AbstractDiscreteStateSpace(IDiscreteStateSpace):
     """
 
     def __init__(self, states: Union[Set[AbstractState], Sequence[AbstractState]]):
-        # Convert to set to remove duplicates and enable O(1) lookups
         self.allowed_states = set(states)
 
-        # We sort the list for deterministic encoding (Rock is always 0, Paper always 1)
-        # This prevents random ID swapping between runs.
-        # Note: AbstractState must support sorting (e.g., by name) or we just use list(set).
-        sorted_states = sorted(list(self.allowed_states), key=lambda x: str(x))
+        # OPTIMIZATION: Sort ONCE and store it.
+        # This pays the O(N log N) cost only at startup.
+        self._sorted_states = sorted(list(self.allowed_states), key=lambda x: str(x))
 
-        # Auto-initialize the encoder with the known set
-        self._encoder = BitMaskingEncoding(sorted_states)
-        self._num_states = len(sorted_states)
+        self._encoder = BitMaskingEncoding(self._sorted_states)
+        self._num_states = len(self._sorted_states)
 
     @property
     def encoder(self) -> StateEncoder:
@@ -78,6 +75,16 @@ class AbstractDiscreteStateSpace(IDiscreteStateSpace):
             return AbstractDiscreteStateSpace(new_set)
 
         raise TypeError(f"Cannot intersect AbstractDiscreteStateSpace with {type(other)}")
+
+    # Inside AbstractDiscreteStateSpace class...
+
+    def map(self, operation: IStateOperation) -> List[Any]:
+        """
+        Applies an operation to all abstract states.
+        Uses the pre-sorted cached list for O(N) speed.
+        """
+        # FAST PATH: No sorting, just iteration.
+        return [operation(s) for s in self._sorted_states]
 
 
 class VectorStateSpace(IDiscreteStateSpace):
@@ -162,3 +169,22 @@ class VectorStateSpace(IDiscreteStateSpace):
             return VectorStateSpace(list(new_set), self._dim)
 
         raise TypeError(f"Cannot intersect VectorStateSpace with {type(other)}")
+
+    # Inside VectorStateSpace class...
+
+    def map(self, operation: IStateOperation) -> Any:
+        """
+        Applies an operation to ALL states in the space efficiently.
+        """
+        # 1. Get the Raw Matrix (M, D)
+        matrix = self.get_matrix()
+
+        # 2. OPTIMIZATION: Create a "Batched State"
+        # Instead of creating 100 VectorState objects, we create ONE.
+        # This object holds the entire matrix in its 'values' field.
+        batched_state = VectorState(values=matrix)
+
+        # 3. Call the function ONCE
+        # JAX will automatically broadcast the math over the batch.
+        # No loops. No decoding overhead.
+        return operation(batched_state)
