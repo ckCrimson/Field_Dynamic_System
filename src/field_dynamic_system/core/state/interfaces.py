@@ -1,7 +1,7 @@
 from abc import abstractmethod
 from typing import Protocol, Any, runtime_checkable
-import jax.numpy as jnp
 
+import jax.tree_util
 
 # --- 1. Base State Marker ---
 @runtime_checkable
@@ -33,6 +33,17 @@ class StateEncoder(Protocol):
 
     def decode(self, encoded_data: jnp.ndarray) -> 'State':
         ...
+
+    def __eq__(self, other):
+        # Value-based equality
+        if type(self) != type(other):
+            return False
+        return self.__dict__ == other.__dict__
+
+    def __hash__(self):
+        # Hash based on attributes (assumes attributes are hashable)
+        # Convert dicts to frozensets for hashing if needed
+        return hash(tuple(sorted(self.__dict__.items())))
 
     @property
     def shape(self) -> tuple[int, ...]:
@@ -146,5 +157,36 @@ class IDiscreteStateSpace(StateSpace, Protocol):
         return state in self.allowed_states
 
     def map(self, operation: IStateOperation):
+        pass
+
+    def __init_subclass__(cls, **kwargs):
+        """
+        GENERIC IMPLEMENTATION:
+        Automatically registers any subclass as a JAX Pytree.
+        """
+        super().__init_subclass__(**kwargs)
+
+        # We tell JAX: "When you see this class, call these specific methods"
+        jax.tree_util.register_pytree_node(
+            cls,
+            cls._tree_flatten,
+            cls._tree_unflatten
+        )
+
+    @abstractmethod
+    def _tree_flatten(self):
+        """
+        SPECIALIZED: Must return (children, aux_data).
+        - Children: JAX Arrays (Dynamic/Differentiable).
+        - Aux: Static Metadata (Integers, Strings, Tuples).
+        """
+        pass
+
+    @classmethod
+    @abstractmethod
+    def _tree_unflatten(cls, aux_data, children):
+        """
+        SPECIALIZED: Must reconstruct the object from the data.
+        """
         pass
 

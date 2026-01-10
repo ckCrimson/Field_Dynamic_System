@@ -3,7 +3,7 @@ from .interfaces import IDiscreteStateSpace, StateEncoder, StateSpace, State, IS
 from .encoding import BitMaskingEncoding, VectorEncoding
 from .state import VectorState, AbstractState
 
-from typing import Set, List, Union, Sequence, Any
+from typing import Set, List, Union, Sequence, Any, Optional
 
 
 class AbstractDiscreteStateSpace(IDiscreteStateSpace):
@@ -12,15 +12,34 @@ class AbstractDiscreteStateSpace(IDiscreteStateSpace):
     Uses Set theory for fast lookups.
     """
 
-    def __init__(self, states: Union[Set[AbstractState], Sequence[AbstractState]]):
+    def __init__(self,
+                 states: Union[Set[AbstractState], Sequence[AbstractState]],
+                 encoder: Optional[StateEncoder] = None):
+
         self.allowed_states = set(states)
 
-        # OPTIMIZATION: Sort ONCE and store it.
-        # This pays the O(N log N) cost only at startup.
+        # Optimization: Sort once for deterministic iteration/encoding
         self._sorted_states = sorted(list(self.allowed_states), key=lambda x: str(x))
-
-        self._encoder = BitMaskingEncoding(self._sorted_states)
         self._num_states = len(self._sorted_states)
+
+        # Dependency Injection: Use provided encoder or default to BitMasking
+        if encoder is None:
+            self._encoder = BitMaskingEncoding(self._sorted_states)
+        else:
+            self._encoder = encoder
+
+    @property
+    def encoder(self) -> StateEncoder:
+        return self._encoder
+
+    @encoder.setter
+    def encoder(self, new_encoder: StateEncoder):
+        """
+        Allows hot-swapping the encoder strategy.
+        Note: The user is responsible for ensuring the new encoder
+        is compatible with the current set of states.
+        """
+        self._encoder = new_encoder
 
     @property
     def encoder(self) -> StateEncoder:
@@ -85,6 +104,26 @@ class AbstractDiscreteStateSpace(IDiscreteStateSpace):
         """
         # FAST PATH: No sorting, just iteration.
         return [operation(s) for s in self._sorted_states]
+
+    def _tree_flatten(self):
+        # SPECIALIZED: No arrays here, so children is empty.
+        children = ()
+        # Everything is metadata
+        aux_data = (self.allowed_states, self._encoder, self._num_states)
+        return children, aux_data
+
+    @classmethod
+    def _tree_unflatten(cls, aux_data, children):
+        allowed_states, encoder, num_states = aux_data
+
+        # BYPASS INIT
+        obj = cls.__new__(cls)
+        obj.allowed_states = allowed_states
+        # We can re-sort cheaply or store the sorted list in aux_data if preferred
+        obj._sorted_states = sorted(list(allowed_states), key=lambda x: str(x))
+        obj._encoder = encoder
+        obj._num_states = num_states
+        return obj
 
 
 class VectorStateSpace(IDiscreteStateSpace):
@@ -188,3 +227,23 @@ class VectorStateSpace(IDiscreteStateSpace):
         # JAX will automatically broadcast the math over the batch.
         # No loops. No decoding overhead.
         return operation(batched_state)
+
+    def _tree_flatten(self):
+        # SPECIALIZED: The Matrix is dynamic (Children)
+        children = (self._matrix,)
+        # Metadata is static (Aux)
+        aux_data = (self.allowed_vectors, self._dim, self._encoder)
+        return children, aux_data
+
+    @classmethod
+    def _tree_unflatten(cls, aux_data, children):
+        allowed_vectors, dim, encoder = aux_data
+        matrix = children[0]
+
+        # BYPASS INIT: Manually reconstruct for speed
+        obj = cls.__new__(cls)
+        obj.allowed_vectors = allowed_vectors
+        obj._dim = dim
+        obj._encoder = encoder
+        obj._matrix = matrix
+        return obj
