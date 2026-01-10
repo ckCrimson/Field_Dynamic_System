@@ -190,3 +190,10 @@ class IDiscreteStateSpace(StateSpace, Protocol):
         """
         pass
 
+@runtime_checkable
+class IStateSpaceTransformation(Protocol):
+    """
+    The Contract: Takes a StateSpace, returns a new StateSpace.
+    """
+    def transform(self, space: StateSpace) -> StateSpace:
+        pass

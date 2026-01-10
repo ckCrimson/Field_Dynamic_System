@@ -1,3 +1,5 @@
+from dataclasses import dataclass
+
 import jax.numpy as jnp
 from .interfaces import IDiscreteStateSpace, StateEncoder, StateSpace, State, IStateOperation
 from .encoding import BitMaskingEncoding, VectorEncoding
@@ -126,6 +128,14 @@ class AbstractDiscreteStateSpace(IDiscreteStateSpace):
         return obj
 
 
+@dataclass
+class _BatchedVectorState:
+    """
+    Internal wrapper to trick operations into thinking they have a VectorState,
+    while holding the raw JAX matrix for performance.
+    """
+    values: jnp.ndarray
+
 class VectorStateSpace(IDiscreteStateSpace):
     """
     A Finite Set of specific VectorStates.
@@ -210,22 +220,11 @@ class VectorStateSpace(IDiscreteStateSpace):
         raise TypeError(f"Cannot intersect VectorStateSpace with {type(other)}")
 
     # Inside VectorStateSpace class...
-
     def map(self, operation: IStateOperation) -> Any:
-        """
-        Applies an operation to ALL states in the space efficiently.
-        """
-        # 1. Get the Raw Matrix (M, D)
-        matrix = self.get_matrix()
+        # 1. Wrap the matrix cheaply
+        batched_state = _BatchedVectorState(self._matrix)
 
-        # 2. OPTIMIZATION: Create a "Batched State"
-        # Instead of creating 100 VectorState objects, we create ONE.
-        # This object holds the entire matrix in its 'values' field.
-        batched_state = VectorState(values=matrix)
-
-        # 3. Call the function ONCE
-        # JAX will automatically broadcast the math over the batch.
-        # No loops. No decoding overhead.
+        # 2. Dispatch (Zero overhead)
         return operation(batched_state)
 
     def _tree_flatten(self):
@@ -247,3 +246,10 @@ class VectorStateSpace(IDiscreteStateSpace):
         obj._encoder = encoder
         obj._matrix = matrix
         return obj
+
+    @property
+    def num_states(self) -> int:
+        """Returns the number of unique vectors in the space."""
+        # If allowed_vectors is a list/tuple, use len()
+        # If we rely on _matrix, use shape[0]
+        return len(self.allowed_vectors)
