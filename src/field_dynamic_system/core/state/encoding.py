@@ -1,32 +1,51 @@
+from dataclasses import dataclass
+
 import jax.numpy as jnp
 from .interfaces import StateEncoder, State
 from .state import VectorState, AbstractState
-from typing import List, Union, Sequence
+from typing import List, Union, Sequence, Tuple
 
 
+# class VectorEncoding(StateEncoder):
+#     def __init__(self, dim: int):
+#         self.dim = dim
+#
+#     def encode(self, data: Union[State, Sequence[State]]) -> jnp.ndarray:
+#         # 1. BATCH PATH (Fastest for lists)
+#         if isinstance(data, list) or isinstance(data, tuple):
+#             # Optimistic check: Assume all elements are VectorState for speed
+#             # Extract tuples: [(1.0, 2.0), (3.0, 4.0)]
+#             raw_values = [s.values for s in data]
+#             return jnp.array(raw_values, dtype=jnp.float32)
+#
+#         # 2. SINGLE PATH
+#         if isinstance(data, VectorState):
+#             return jnp.array(data.values, dtype=jnp.float32)
+#
+#         raise TypeError(f"Expected VectorState or List[VectorState], got {type(data)}")
+#
+#     def decode(self, data: jnp.ndarray) -> VectorState:
+#         return VectorState(tuple(data.tolist()))
+#
+#     @property
+#     def shape(self) -> tuple[int, ...]:
+#         return (self.dim,)
+
+@dataclass
 class VectorEncoding(StateEncoder):
-    def __init__(self, dim: int):
-        self.dim = dim
+    dim: int
 
     def encode(self, data: Union[State, Sequence[State]]) -> jnp.ndarray:
-        # 1. BATCH PATH (Fastest for lists)
-        if isinstance(data, list) or isinstance(data, tuple):
-            # Optimistic check: Assume all elements are VectorState for speed
-            # Extract tuples: [(1.0, 2.0), (3.0, 4.0)]
-            raw_values = [s.values for s in data]
-            return jnp.array(raw_values, dtype=jnp.float32)
-
-        # 2. SINGLE PATH
         if isinstance(data, VectorState):
-            return jnp.array(data.values, dtype=jnp.float32)
+            return jnp.array(data.values)
+        # Handle list of states
+        return jnp.array([s.values for s in data])
 
-        raise TypeError(f"Expected VectorState or List[VectorState], got {type(data)}")
-
-    def decode(self, data: jnp.ndarray) -> VectorState:
-        return VectorState(tuple(data.tolist()))
+    def decode(self, encoded_data: jnp.ndarray) -> State:
+        return VectorState(tuple(encoded_data.tolist()))
 
     @property
-    def shape(self) -> tuple[int, ...]:
+    def shape(self) -> Tuple[int, ...]:
         return (self.dim,)
 
 

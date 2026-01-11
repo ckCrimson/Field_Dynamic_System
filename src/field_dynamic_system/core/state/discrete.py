@@ -1,9 +1,10 @@
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 
 import jax.numpy as jnp
 from .interfaces import IDiscreteStateSpace, StateEncoder, StateSpace, State, IStateOperation
 from .encoding import BitMaskingEncoding, VectorEncoding
 from .state import VectorState, AbstractState
+from collections import defaultdict
 
 from typing import Set, List, Union, Sequence, Any, Optional
 
@@ -29,6 +30,11 @@ class AbstractDiscreteStateSpace(IDiscreteStateSpace):
             self._encoder = BitMaskingEncoding(self._sorted_states)
         else:
             self._encoder = encoder
+
+    @property
+    def num_states(self) -> int:
+        """Returns the number of unique symbolic states."""
+        return len(self.allowed_states)
 
     @property
     def encoder(self) -> StateEncoder:
@@ -130,31 +136,30 @@ class AbstractDiscreteStateSpace(IDiscreteStateSpace):
 
 @dataclass
 class _BatchedVectorState:
-    """
-    Internal wrapper to trick operations into thinking they have a VectorState,
-    while holding the raw JAX matrix for performance.
-    """
+    """Internal wrapper for JAX optimizations."""
     values: jnp.ndarray
+
 
 class VectorStateSpace(IDiscreteStateSpace):
     """
     A Finite Set of specific VectorStates.
-    Example: { Up=(0,1), Down=(0,-1) }
+    Standard Python Class.
     """
 
-    def __init__(self, vectors: List[VectorState], dim: int):
+    def __init__(self, vectors: Sequence[VectorState], dim: int):
         # We convert to a set immediately to remove duplicates
         self.allowed_vectors = tuple(set(vectors))
-        self._dim = dim
+
+        # FIX: Use 'self.dim' (public) so children and external calls can see it
+        self.dim = dim
+
         self._encoder = VectorEncoding(dim)
 
-        # Pre-compute the matrix of valid vectors for fast JAX lookup
-        # Shape: (M, D) where M is number of allowed vectors
+        # Pre-compute matrix
         if self.allowed_vectors:
             raw_list = [v.values for v in self.allowed_vectors]
             self._matrix = jnp.array(raw_list, dtype=jnp.float32)
         else:
-            # Handle empty space case
             self._matrix = jnp.zeros((0, dim), dtype=jnp.float32)
 
     @property
@@ -165,7 +170,6 @@ class VectorStateSpace(IDiscreteStateSpace):
         return self._matrix
 
     def contains(self, state: Union[State, Sequence[State], jnp.ndarray]) -> Union[bool, jnp.ndarray]:
-        # ... (Same implementation as previous step) ...
         if not isinstance(state, jnp.ndarray):
             vecs = self.encoder.encode(state)
         else:
@@ -174,7 +178,6 @@ class VectorStateSpace(IDiscreteStateSpace):
         if vecs.ndim == 1:
             vecs = vecs[None, :]
 
-        # If space is empty, nothing is contained
         if self._matrix.shape[0] == 0:
             res = jnp.zeros(vecs.shape[0], dtype=bool)
             return res[0] if res.shape == (1,) else res
@@ -189,49 +192,36 @@ class VectorStateSpace(IDiscreteStateSpace):
         return is_valid
 
     def union(self, other: StateSpace) -> StateSpace:
-        """
-        Combines allowed vectors from both spaces.
-        Example: {Up} U {Down} = {Up, Down}
-        """
         if isinstance(other, VectorStateSpace):
-            # Check dimension compatibility
-            if self._dim != other._dim:
-                raise ValueError(f"Dimension mismatch: {self._dim} vs {other._dim}")
+            # FIX: Use self.dim
+            if self.dim != other.dim:
+                raise ValueError(f"Dimension mismatch: {self.dim} vs {other.dim}")
 
-            # Set Union logic (Fast because VectorState is hashable)
             new_set = set(self.allowed_vectors).union(set(other.allowed_vectors))
-            return VectorStateSpace(list(new_set), self._dim)
+            return VectorStateSpace(list(new_set), self.dim)
 
         raise TypeError(f"Cannot union VectorStateSpace with {type(other)}")
 
     def intersection(self, other: StateSpace) -> StateSpace:
-        """
-        Keeps only vectors present in BOTH spaces.
-        Example: {Up, Down} ∩ {Up, Left} = {Up}
-        """
         if isinstance(other, VectorStateSpace):
-            if self._dim != other._dim:
-                raise ValueError(f"Dimension mismatch: {self._dim} vs {other._dim}")
+            # FIX: Use self.dim
+            if self.dim != other.dim:
+                raise ValueError(f"Dimension mismatch: {self.dim} vs {other.dim}")
 
-            # Set Intersection logic
             new_set = set(self.allowed_vectors).intersection(set(other.allowed_vectors))
-            return VectorStateSpace(list(new_set), self._dim)
+            return VectorStateSpace(list(new_set), self.dim)
 
         raise TypeError(f"Cannot intersect VectorStateSpace with {type(other)}")
 
-    # Inside VectorStateSpace class...
     def map(self, operation: IStateOperation) -> Any:
-        # 1. Wrap the matrix cheaply
         batched_state = _BatchedVectorState(self._matrix)
-
-        # 2. Dispatch (Zero overhead)
         return operation(batched_state)
 
+    # --- JAX Pytree Registration ---
     def _tree_flatten(self):
-        # SPECIALIZED: The Matrix is dynamic (Children)
         children = (self._matrix,)
-        # Metadata is static (Aux)
-        aux_data = (self.allowed_vectors, self._dim, self._encoder)
+        # FIX: Store self.dim in aux_data
+        aux_data = (self.allowed_vectors, self.dim, self._encoder)
         return children, aux_data
 
     @classmethod
@@ -239,17 +229,136 @@ class VectorStateSpace(IDiscreteStateSpace):
         allowed_vectors, dim, encoder = aux_data
         matrix = children[0]
 
-        # BYPASS INIT: Manually reconstruct for speed
         obj = cls.__new__(cls)
         obj.allowed_vectors = allowed_vectors
-        obj._dim = dim
+        # FIX: Restore to self.dim
+        obj.dim = dim
         obj._encoder = encoder
         obj._matrix = matrix
         return obj
 
     @property
     def num_states(self) -> int:
-        """Returns the number of unique vectors in the space."""
-        # If allowed_vectors is a list/tuple, use len()
-        # If we rely on _matrix, use shape[0]
         return len(self.allowed_vectors)
+
+    def filter_by_index(self, axis_idx: int, value: float, atol: float = 1e-6) -> 'VectorStateSpace':
+        """
+        Returns a new VectorStateSpace containing only vectors where
+        vector[axis_idx] is approximately equal to 'value'.
+        """
+        # 1. Extract the relevant column from the JAX matrix
+        column = self._matrix[:, axis_idx]
+
+        # 2. Create a Boolean Mask (Fast JAX comparison)
+        mask = jnp.isclose(column, value, atol=atol)
+
+        # 3. Apply mask to get the subset of raw vectors
+        filtered_data = self._matrix[mask]
+
+        # 4. Handle Empty Result
+        if filtered_data.shape[0] == 0:
+            return VectorStateSpace([], dim=self.dim)
+
+        # 5. Reconstruct the Subspace
+        # FIX: Use .tolist() to convert JAX Arrays -> Python Floats
+        new_vectors = [VectorState(tuple(row.tolist())) for row in filtered_data]
+
+        return VectorStateSpace(new_vectors, dim=self.dim)
+
+
+
+class IndexedVectorStateSpace(VectorStateSpace):
+    """
+    An optimized VectorSpace that pre-builds lookup tables for specific dimensions.
+    Trades Memory for Speed.
+    """
+
+    def __init__(self, allowed_vectors, dim: int, indexed_axes: tuple = (0,), precision: int = 6):
+        # 1. Initialize the Parent (VectorStateSpace)
+        # This handles the matrix creation and 'dim' assignment
+        super().__init__(allowed_vectors, dim=dim)
+
+        # 2. Store indexing parameters
+        self.indexed_axes = indexed_axes
+        self.precision = precision
+
+        # 3. Build the Index (The "Database")
+        self._index_map = self._build_index()
+
+    def _build_index(self) -> dict:
+        """Internal helper to construct the hash map."""
+        lookup = {axis: defaultdict(list) for axis in self.indexed_axes}
+
+        # We iterate once through the vectors we just stored
+        for i, vector in enumerate(self.allowed_vectors):
+            vals = vector.values
+            for axis in self.indexed_axes:
+                if axis < len(vals):
+                    # Rounding is crucial for float equality in Hash Maps
+                    key = round(vals[axis], self.precision)
+                    lookup[axis][key].append(i)
+        return lookup
+
+    def search_by_index(self, axis_idx: int, value: float) -> 'VectorStateSpace':
+        """O(1) Search using the hash map."""
+        # Check if we have an optimized index for this axis
+        if axis_idx in self._index_map:
+            key = round(value, self.precision)
+            # Fast Lookup
+            target_indices = self._index_map[axis_idx].get(key, [])
+
+            if not target_indices:
+                return self._create_empty()
+
+            # Retrieve vectors directly
+            subset_vectors = [self.allowed_vectors[i] for i in target_indices]
+            return VectorStateSpace(subset_vectors, dim=self.dim)
+
+        # Fallback to standard O(N) scan if axis is not indexed
+        return super().filter_by_index(axis_idx, value, atol=10 ** -self.precision)
+
+    def select_index(self, axes: list[int], values: list[float]) -> 'VectorStateSpace':
+        """Compound Search (AND Query)."""
+        if len(axes) != len(values):
+            raise ValueError("Axes list and Values list must have the same length.")
+
+        candidate_indices = None
+        manual_constraints = []
+
+        # 1. Fast Pass (Intersection)
+        for axis, val in zip(axes, values):
+            if axis in self._index_map:
+                key = round(val, self.precision)
+                found = set(self._index_map[axis].get(key, []))
+
+                if candidate_indices is None:
+                    candidate_indices = found
+                else:
+                    candidate_indices.intersection_update(found)
+
+                if not candidate_indices:
+                    return self._create_empty()
+            else:
+                manual_constraints.append((axis, val))
+
+        # 2. Handle results
+        if candidate_indices is None:
+            # If no indexed axes were used, we must check everything (slow path)
+            candidate_indices = range(len(self.allowed_vectors))
+
+        # 3. Final Verification (Manual Checks on survivors)
+        final_vectors = []
+        for idx in candidate_indices:
+            vector = self.allowed_vectors[idx]
+            match = True
+            for axis, val in manual_constraints:
+                if not jnp.isclose(vector.values[axis], val, atol=10 ** -self.precision):
+                    match = False
+                    break
+            if match:
+                final_vectors.append(vector)
+
+        return VectorStateSpace(final_vectors, dim=self.dim)
+
+    def _create_empty(self):
+        return VectorStateSpace([], dim=self.dim)
