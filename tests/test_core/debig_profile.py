@@ -16,8 +16,7 @@ transform = DiscreteStateTransformation(dummy_op, AbstractDiscreteStateSpace)
 print("Profiling Map Operation...")
 with cProfile.Profile() as pr:
     # This is the line we are testing
-    new_space = space.map(transform)
-
+    new_space = transform.transform(space)
 # 3. Print Results
 stats = pstats.Stats(pr)
 stats.sort_stats(pstats.SortKey.TIME)  # Sort by 'Internal Time' (time spent strictly inside the function)

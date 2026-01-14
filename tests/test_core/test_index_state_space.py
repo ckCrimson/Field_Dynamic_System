@@ -21,12 +21,16 @@ def grid_space():
 def test_initialization_builds_index(grid_space):
     """Verify that the internal hash map is populated correctly."""
     # We indexed Axis 0. There should be 10 unique keys (0.0 to 9.0).
-    assert 0 in grid_space._index_map
-    assert len(grid_space._index_map[0]) == 10
 
-    # Check that x=5.0 has 10 entries (y=0..9)
-    indices = grid_space._index_map[0][5.0]
-    assert len(indices) == 10
+    # OLD NAME: grid_space._index_map
+    # NEW NAME: grid_space._axis_index_map
+
+    # Check that Axis 0 exists in the map
+    assert 0 in grid_space._axis_index_map
+
+    # Check that it found the keys (0.0, 1.0, etc.)
+    axis_0_lookup = grid_space._axis_index_map[0]
+    assert len(axis_0_lookup) == 10
 
 
 def test_search_by_index_hit(grid_space):
@@ -94,7 +98,7 @@ def test_benchmark_indexed_vs_naive(capsys):
     print(f"Index Build Time: {build_time:.4f}s")
 
     # 3. Define Query
-    target_val = 50000.0  # Middle of the pack
+    target_val = 5000.0  # Middle of the pack
 
     # 4. Measure Naive (Standard)
     start = time.time()

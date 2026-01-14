@@ -39,7 +39,7 @@ def benchmark_vector_map():
     print("Running Naive Loop...")
     start = time.time()
     # User gets list of objects, loops, calls function, stacks result
-    _ = jnp.stack([op_magnitude(v) for v in space.allowed_vectors])
+    _ = jnp.stack([op_magnitude(v) for v in space.allowed_states])
     naive_time = time.time() - start
     print(f"Naive Loop:   {naive_time:.4f}s")
 

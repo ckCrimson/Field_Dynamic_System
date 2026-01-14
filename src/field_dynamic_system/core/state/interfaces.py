@@ -1,5 +1,5 @@
 from abc import abstractmethod
-from typing import Protocol, Any, runtime_checkable
+from typing import Protocol, Any, runtime_checkable, List
 
 import jax.tree_util
 
@@ -126,6 +126,12 @@ class IDiscreteStateSpace(StateSpace, Protocol):
         """Reference to the specific encoding scheme used."""
         ...
 
+    @property
+    @abstractmethod
+    def num_states(self) -> int:
+        """Returns the total count of states in this space."""
+        pass
+
     def get_matrix(self) -> jnp.ndarray:
         """
         Returns a JAX array containing ALL valid encoded states.
@@ -187,6 +193,30 @@ class IDiscreteStateSpace(StateSpace, Protocol):
     def _tree_unflatten(cls, aux_data, children):
         """
         SPECIALIZED: Must reconstruct the object from the data.
+        """
+        pass
+
+    @abstractmethod
+    def get_index_of(self, state_obj: Any) -> int:
+        """
+        Returns the integer index (0 to N-1) of the given state object.
+        Returns -1 if the state is not found in this space.
+        """
+        pass
+
+
+    @property
+    @abstractmethod
+    def states(self) -> List[Any]:
+        """Returns the raw Python list of state objects."""
+        pass
+
+
+    @abstractmethod
+    def create_subset(self, states: List[Any]) -> 'IDiscreteStateSpace':
+        """
+        Factory method: Creates a NEW Discrete State Space containing
+        only the provided list of states.
         """
         pass
 

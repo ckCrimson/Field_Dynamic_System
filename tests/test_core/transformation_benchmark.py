@@ -153,7 +153,7 @@ def test_benchmark_vector_to_abstract(capsys):
     start = time.time()
 
     naive_results = set()
-    for v in vector_space.allowed_vectors:
+    for v in vector_space.allowed_states:
         x, y = v.values
         norm = math.sqrt(x ** 2 + y ** 2)
 

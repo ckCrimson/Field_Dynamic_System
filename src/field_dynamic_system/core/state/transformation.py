@@ -37,7 +37,7 @@ class DiscreteStateTransformation(IStateSpaceTransformation):
             # Manual Iteration (Safe for Strings)
             if isinstance(space, VectorStateSpace):
                 # Iterate over vector objects
-                raw_results = [self.operation(v) for v in space.allowed_vectors]
+                raw_results = [self.operation(v) for v in space.allowed_states]
             else:
                 # Abstract -> Abstract
                 raw_results = [self.operation(s) for s in space.allowed_states]
