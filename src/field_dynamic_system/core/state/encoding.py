@@ -3,7 +3,7 @@ from dataclasses import dataclass
 import jax.numpy as jnp
 from .interfaces import StateEncoder, State
 from .state import VectorState, AbstractState
-from typing import List, Union, Sequence, Tuple
+from typing import List, Union, Sequence, Tuple, Any
 
 
 # class VectorEncoding(StateEncoder):
@@ -76,3 +76,47 @@ class BitMaskingEncoding(StateEncoder):
     @property
     def shape(self) -> tuple[int, ...]:
         return (1,)
+
+
+# ... existing StateEncoder base class ...
+
+class IdentityEncoder(StateEncoder):
+    """
+    Pass-through encoder for Continuous Spaces.
+    Input: Vector R^n
+    Output: Vector R^n (Unchanged)
+    """
+    def __init__(self, dim: int):
+        self._dim = dim
+
+    @property
+    def output_dim(self) -> int:
+        return self._dim
+
+    def encode(self, state: Union[Any, jnp.ndarray]) -> jnp.ndarray:
+        """
+        Expects input to already be numeric (float/int).
+        Just ensures it is a JAX array of correct shape.
+        """
+        # 1. Convert to JAX Array
+        if not isinstance(state, jnp.ndarray):
+            # Handle object wrappers like VectorState
+            if hasattr(state, 'values'):
+                arr = jnp.array(state.values, dtype=jnp.float32)
+            else:
+                arr = jnp.array(state, dtype=jnp.float32)
+        else:
+            arr = state
+
+        # 2. Validation (Optional, can be skipped for raw speed)
+        # Checks if the last dimension matches self._dim
+        # if arr.shape[-1] != self._dim:
+        #     raise ValueError(f"Expected dim {self._dim}, got {arr.shape[-1]}")
+
+        return arr.astype(jnp.float32)
+
+    def decode(self, encoded_state: jnp.ndarray) -> Any:
+        """
+        Identity: Returns the vector as-is.
+        """
+        return encoded_state

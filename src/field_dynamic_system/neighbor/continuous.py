@@ -1,5 +1,4 @@
-from typing import Any, Callable
-import jax.numpy as jnp
+from typing import Any
 
 from .interfaces import Topology
 from ..core.state.interfaces import IContinuousStateSpace, StateSpace
@@ -8,77 +7,86 @@ from ..core.state.interfaces import IContinuousStateSpace, StateSpace
 # Usually, this is a basic geometric shape.
 from ..core.state.continous import HypersphereSpace  # Assuming this exists or we create it
 
+from abc import abstractmethod
+
+
 
 class ContinuousTopology(Topology):
     """
-    Topology for Continuous, Uncountable State Spaces (Manifolds).
+    Base class for Continuous Reachability.
+
+    Unlike DiscreteTopology, we CANNOT automatically compile a 'matrix'
+    for multi-step reachability because the state space is uncountable.
+
+    Strategy:
+    - Simple Topologies (Metric): We implement exact multi-step.
+    - Complex Topologies: The User must implement multi-step.
     """
 
     def __init__(self, state_space: IContinuousStateSpace):
         if not isinstance(state_space, IContinuousStateSpace):
             raise TypeError("ContinuousTopology requires an IContinuousStateSpace.")
         super().__init__(state_space)
-        self.continuous_space = state_space
+
+    @abstractmethod
+    def successor(self, state: Any) -> StateSpace:
+        """Returns the immediate reachable set (One Step)."""
+        pass
 
     def multi_step_successor(self, initial_state: Any, steps: int) -> StateSpace:
         """
-        In Continuous terms, 'steps' usually implies Time Steps (dt).
-        Recursive application: S_t+1 = Successor(S_t)
+        Calculates reachability after N steps.
+
+        Default Implementation:
+        If the user does not override this, we try to perform recursive expansion
+        assuming the StateSpace object supports some form of 'minkowski_sum' or 'expansion'.
+
+        If that is impossible, we raise an Error forcing the user to implement it.
         """
-        current_region = self.successor(initial_state)
+        # 1. Base Case
+        if steps == 0:
+            # We need to wrap the single point into a Shape (e.g., 0-radius ball)
+            # This depends on the space type. Let's assume HyperSphere for generic R^n.
+            return HypersphereSpace(initial_state, radius=0.0)
 
-        # For metric topology, step 2 is just a larger ball.
-        # For dynamic topology, it is numerical integration.
-        # We delegate to the specific logic of the subclass if possible,
-        # or chain the successor calls.
+        # 2. Optimization Hook
+        # Users should override this method for exact math (e.g. radius * steps).
+        return self._compute_multi_step_manually(initial_state, steps)
 
-        for _ in range(1, steps):
-            # This is tricky in continuous: Union of balls around every point in a ball?
-            # That is mathematically just a larger ball: Radius = r * steps.
-            # We let the subclass handle this optimization.
-            current_region = self._expand_region(current_region)
+    def _compute_multi_step_manually(self, initial_state: Any, steps: int) -> StateSpace:
+        """
+        Fallback logic.
+        For many continuous systems, R^k(x) is difficult to compute generically.
+        """
+        raise NotImplementedError(
+            "Exact multi-step reachability cannot be computed generically for continuous spaces. "
+            "Please implement 'multi_step_successor' in your Topology subclass "
+            "or use a specific implementation like MetricTopology."
+        )
 
-        return current_region
 
-    def _expand_region(self, region: StateSpace) -> StateSpace:
-        """Helper for multi-step expansion."""
-        raise NotImplementedError("Subclass must define how regions expand over steps.")
-
+# --- CONCRETE IMPLEMENTATION 1: Metric Topology ---
+# This is the "Standard" one we provide.
 
 class MetricTopology(ContinuousTopology):
     """
-    Defines connectivity based on distance (Epsilon-Ball).
-    Reachable(x) = { y | dist(x, y) < radius }
+    Reachability is defined by Distance.
+    R(x) = Ball(x, epsilon)
     """
 
-    def __init__(self, state_space: IContinuousStateSpace, radius: float, metric_fn: Callable = None):
+    def __init__(self, state_space: IContinuousStateSpace, epsilon: float):
         super().__init__(state_space)
-        self.radius = radius
-        # Default to Euclidean if no metric provided
-        self.metric_fn = metric_fn if metric_fn else lambda a, b: jnp.linalg.norm(a - b)
+        self.epsilon = epsilon
 
     def successor(self, state: Any) -> StateSpace:
-        """
-        Returns a StateSpace representing the neighborhood Ball.
-        """
-        # We return a HyperSphere centered at the current state
-        # This is a valid 'Subset' of the continuous space.
-        return HypersphereSpace(center=state, radius=self.radius)
+        return HypersphereSpace(center=state, radius=self.epsilon)
 
-    def predecessor(self, state: Any) -> StateSpace:
+    def multi_step_successor(self, initial_state: Any, steps: int) -> StateSpace:
         """
-        Symmetric Metric: If I can reach y from x, I can reach x from y.
+        Exact Implementation:
+        The reachable set grows linearly with steps.
+        radius_new = radius_old + (steps * epsilon)
         """
-        return self.successor(state)
-
-    def _expand_region(self, region: StateSpace) -> StateSpace:
-        """
-        Optimization: A ball of radius R expanded by radius r becomes Ball(R+r).
-        """
-        if isinstance(region, HypersphereSpace):
-            # L^2[x] = Ball(x, 2r)
-            return HypersphereSpace(center=region.center, radius=region.radius + self.radius)
-
-        # Fallback for complex shapes (Minkowski Sum approximation)
-        # For now, just return the region or raise error
-        return region
+        # Starting from a point implies initial radius is 0
+        total_radius = steps * self.epsilon
+        return HypersphereSpace(center=initial_state, radius=total_radius)

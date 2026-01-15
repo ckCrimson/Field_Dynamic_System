@@ -6,7 +6,7 @@ from .interfaces import Topology
 from ..core.state.interfaces import IDiscreteStateSpace
 
 from abc import abstractmethod
-from typing import Any, Optional, Sequence
+from typing import Any, List, Tuple, Optional, Callable, Sequence
 import jax.numpy as jnp
 import jax
 
@@ -259,3 +259,259 @@ class DiscreteTopology(Topology):
         all_states = self.discrete_space.states
         subset_states = [all_states[i] for i in idx_list]
         return self.discrete_space.create_subset(subset_states)
+
+
+
+# ==============================================================================
+# 1. GRAPH TOPOLOGY (The "Lookup" Engine)
+# ==============================================================================
+class GraphTopology(DiscreteTopology):
+    """
+    Connections defined by an explicit list of edges.
+    Fastest build time for arbitrary graphs.
+    """
+
+    def __init__(self, state_space: IDiscreteStateSpace, edges: List[Tuple[Any, Any]], directed: bool = True):
+        # We process edges immediately to build the matrix
+        self.raw_edges = edges
+        self.directed = directed
+        super().__init__(state_space)
+
+    def compute_neighbors(self, state: Any) -> List[Any]:
+        # Fallback (slow), usually we use the matrix
+        neighbors = []
+        for u, v in self.raw_edges:
+            if u == state:
+                neighbors.append(v)
+            elif not self.directed and v == state:
+                neighbors.append(u)
+        return neighbors
+
+    def _auto_build_matrix(self) -> sparse.BCOO:
+        N = self.discrete_space.num_states
+        print(f"Building Graph Topology from {len(self.raw_edges)} edges...")
+
+        rows, cols = [], []
+
+        # Optimization: Build index map once
+        # (Assumes states are hashable. If not, we need a slower lookup)
+        try:
+            state_to_idx = {s: i for i, s in enumerate(self.discrete_space.states)}
+            can_hash = True
+        except TypeError:
+            can_hash = False
+
+        for u, v in self.raw_edges:
+            if can_hash:
+                u_idx = state_to_idx.get(u, -1)
+                v_idx = state_to_idx.get(v, -1)
+            else:
+                u_idx = self.discrete_space.get_index_of(u)
+                v_idx = self.discrete_space.get_index_of(v)
+
+            if u_idx != -1 and v_idx != -1:
+                rows.append(u_idx)
+                cols.append(v_idx)
+                if not self.directed:
+                    rows.append(v_idx)
+                    cols.append(u_idx)
+
+        if not rows: return sparse.BCOO.fromdense(jnp.zeros((N, N), dtype=jnp.float32))
+
+        indices = jnp.column_stack((jnp.array(rows), jnp.array(cols)))
+        values = jnp.ones(len(rows), dtype=jnp.float32)
+        return sparse.BCOO((values, indices), shape=(N, N)).sum_duplicates()
+
+
+# ==============================================================================
+# 2. DELTA TOPOLOGY (The "Vector Addition" Engine)
+# ==============================================================================
+class DeltaTopology(DiscreteTopology):
+    """
+    Connections defined by relative offsets (Deltas).
+    State B is reachable from A if B = A + Delta.
+
+    Excellent for Grids, Lattices, and Uniform Structures.
+    """
+
+    def __init__(self, state_space: IDiscreteStateSpace, deltas: List[Any]):
+        super().__init__(state_space)
+        self.deltas = deltas
+
+    def compute_neighbors(self, state: Any) -> List[Any]:
+        neighbors = []
+        for d in self.deltas:
+            try:
+                # This now calls VectorState.__add__
+                possible_neighbor = state + d
+
+                # CRITICAL: We must check if this new state actually exists
+                # in the Universe (StateSpace).
+                # If the robot walks off the grid, 'possible_neighbor'
+                # is valid math, but invalid for the Space.
+
+                # get_index_of returns -1 if not found.
+                if self.discrete_space.get_index_of(possible_neighbor) != -1:
+                    neighbors.append(possible_neighbor)
+
+            except TypeError:
+                pass
+        return neighbors
+
+    def _auto_build_matrix(self) -> sparse.BCOO:
+        """
+        Optimized 'Shift' Builder.
+        """
+        N = self.discrete_space.num_states
+        print(f"Building Delta Topology with {len(self.deltas)} moves...")
+
+        # 1. Convert all states to a Matrix (N, D)
+        # We assume VectorStateSpace for maximum speed
+        try:
+            # Extract raw values from states
+            all_states = jnp.array([s.values for s in self.discrete_space.states])
+            is_vector = True
+        except:
+            is_vector = False
+            # Fallback to slow Python loop if states aren't simple vectors
+            return super()._auto_build_matrix()
+
+        # 2. Convert Deltas to Matrix (K, D)
+        deltas_arr = jnp.array([d.values if hasattr(d, 'values') else d for d in self.deltas])
+
+        # 3. KD-Tree or Broadcast Search
+        # For perfect grids, we can use exact matching.
+        # Strategy: Broadcast (N, 1, D) + (1, K, D) -> (N, K, D) (Candidate Neighbors)
+        # Then find which Candidates exist in the original set.
+
+        # NOTE: For massive spaces, finding "Does vector V exist in Set S" is the bottleneck.
+        # We use a hash map on CPU for O(1) lookup.
+
+        # Map: Vector Tuple -> Index
+        # Rounding needed to avoid float errors
+        state_map = {tuple(map(lambda x: round(float(x), 5), s)): i
+                     for i, s in enumerate(all_states)}
+
+        rows, cols = [], []
+
+        # CPU Loop (Faster than GPU search for sparse connections)
+        for i in range(N):
+            current_vec = all_states[i]
+
+            for k in range(len(deltas_arr)):
+                target_vec = current_vec + deltas_arr[k]
+
+                # Lookup
+                key = tuple(map(lambda x: round(float(x), 5), target_vec))
+                if key in state_map:
+                    target_idx = state_map[key]
+                    rows.append(i)
+                    cols.append(target_idx)
+
+        indices = jnp.column_stack((jnp.array(rows), jnp.array(cols)))
+        values = jnp.ones(len(rows), dtype=jnp.float32)
+        return sparse.BCOO((values, indices), shape=(N, N)).sum_duplicates()
+
+
+# ==============================================================================
+# 3. METRIC DISCRETE TOPOLOGY (The "Distance" Engine)
+# ==============================================================================
+class MetricDiscreteTopology(DiscreteTopology):
+    """
+    Consolidated class for all Distance-based connections.
+
+    - Standard Distance: min_r=0, max_r=R
+    - Ring/Shell:        min_r=R1, max_r=R2
+    - Exact Edge:        min_r=R-e, max_r=R+e
+    """
+
+    def __init__(self, state_space: IDiscreteStateSpace,
+                 max_dist: float,
+                 min_dist: float = 0.0,
+                 distance_fn: Optional[Callable] = None):
+
+        super().__init__(state_space)
+        self.min_dist = min_dist
+        self.max_dist = max_dist
+        self.dist_fn = distance_fn  # Optional custom metric
+
+    def compute_neighbors(self, state: Any) -> List[Any]:
+        """
+        Calculates neighbors for a SINGLE state on CPU.
+        """
+        # 1. Get the vector for the query state
+        if hasattr(state, 'values'):
+            query_vec = jnp.array(state.values)
+        else:
+            query_vec = jnp.array(state)
+
+        neighbors = []
+
+        # 2. Iterate through all states in the space
+        # (For 100k states, this is slow, but for 100 it's instant)
+        for candidate in self.discrete_space.states:
+            if hasattr(candidate, 'values'):
+                cand_vec = jnp.array(candidate.values)
+            else:
+                cand_vec = jnp.array(candidate)
+
+            # 3. Calculate Distance
+            dist = float(jnp.linalg.norm(query_vec - cand_vec))
+
+            # 4. Check Thresholds
+            if self.min_dist <= dist <= self.max_dist:
+                # If min_dist > 0, we implicitly exclude the state itself (dist=0)
+                # unless the user explicitly requested min_dist=0
+                if dist == 0.0 and self.min_dist > 0:
+                    continue
+                neighbors.append(candidate)
+
+        return neighbors
+
+    def _auto_build_matrix(self) -> sparse.BCOO:
+        """
+        Optimized Pairwise Distance Builder.
+        O(N^2) complexity, but fully parallelized on GPU.
+        """
+        N = self.discrete_space.num_states
+        print(f"Building Metric Topology (N={N}, Range=[{self.min_dist}, {self.max_dist}])...")
+
+        # 1. Get State Matrix (N, D)
+        try:
+            states_matrix = jnp.array([s.values for s in self.discrete_space.states])
+        except:
+            print("Warning: MetricTopology requires VectorStates for optimization.")
+            return super()._auto_build_matrix()
+
+        # 2. Compute Distance Matrix (N, N) - Dense!
+        # D_ij = ||x_i - x_j||
+        # Using JAX vmap or broadcasting
+
+        # (N, 1, D) - (1, N, D) -> (N, N, D)
+        diff = states_matrix[:, None, :] - states_matrix[None, :, :]
+        dist_matrix = jnp.linalg.norm(diff, axis=-1)
+
+        # 3. Apply Thresholds (Boolean Mask)
+        # min <= dist <= max
+        # Also exclude self-loops (dist > 0) usually, unless min_dist=0 includes self.
+        mask = (dist_matrix <= self.max_dist) & (dist_matrix >= self.min_dist)
+
+        # Remove diagonal if purely looking for neighbors (optional)
+        if self.min_dist > 0:
+            pass  # Diagonal already removed because dist(i,i)=0
+        else:
+            # If min=0, we might want to keep self-loops or remove them based on convention.
+            # Let's remove self-loops for "neighbors".
+            mask = mask.at[jnp.diag_indices(N)].set(False)
+
+        # 4. Convert Dense Mask -> Sparse Matrix
+        # extracting indices where mask is True
+        rows, cols = jnp.where(mask)
+
+        if rows.shape[0] == 0:
+            return sparse.BCOO.fromdense(jnp.zeros((N, N), dtype=jnp.float32))
+
+        indices = jnp.column_stack((rows, cols))
+        values = jnp.ones(rows.shape[0], dtype=jnp.float32)
+
+        return sparse.BCOO((values, indices), shape=(N, N))

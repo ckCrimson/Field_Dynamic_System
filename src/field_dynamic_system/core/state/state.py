@@ -14,6 +14,25 @@ class VectorState(State):
             # Bypass frozen=True using object.__setattr__
             object.__setattr__(self, 'values', tuple(self.values))
 
+    def __repr__(self):
+        return f"VectorState({self.values})"
+
+    # --- ADD THESE ---
+    def __eq__(self, other):
+        if not isinstance(other, VectorState):
+            return False
+        return self.values == other.values
+
+    def __hash__(self):
+        return hash(self.values)
+
+    def __add__(self, other):
+        # Enable state + delta
+        if isinstance(other, VectorState):
+            new_vals = tuple(a + b for a, b in zip(self.values, other.values))
+            return VectorState(new_vals)
+        return NotImplemented
+
 
 @dataclass(frozen=True)
 class AbstractState(State):

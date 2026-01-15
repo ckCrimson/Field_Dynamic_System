@@ -79,6 +79,24 @@ class IContinuousStateSpace(StateSpace, Protocol):
     For Geometry-based spaces (Hypercubes, Spheres).
     """
 
+    @property
+    @abstractmethod
+    def encoding(self) -> int:
+        """
+        The dimensionality of the continuous space (n).
+        Example: R^3 -> 3
+        """
+        pass
+
+    @property
+    @abstractmethod
+    def dim(self) -> int:
+        """
+        The dimensionality of the continuous space (n).
+        Example: R^3 -> 3
+        """
+        pass
+
     # --- 1. The Helper: Standardizes Input ---
     def _resolve_to_array(self, state: Union[State, Sequence[State], jnp.ndarray]) -> jnp.ndarray:
         """
