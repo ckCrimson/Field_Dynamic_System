@@ -32,7 +32,7 @@ class ContinuousStateSpace(IContinuousStateSpace, ABC):
     # Concrete classes MUST implement 'dim' property
 
     @abstractmethod
-    def contains(self, state_vector: jnp.ndarray) -> bool:
+    def contains(self, state: Union[Any, Sequence[Any], jnp.ndarray]) -> Union[bool, jnp.ndarray]:
         """Returns True if the vector is inside the valid geometry."""
         ...
 

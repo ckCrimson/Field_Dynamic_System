@@ -1,5 +1,8 @@
 from abc import abstractmethod
 from typing import Protocol, Any, runtime_checkable, List
+from typing import Protocol, Union, Sequence, runtime_checkable, Any
+import jax.numpy as jnp
+
 
 import jax.tree_util
 
@@ -10,12 +13,10 @@ class State(Protocol):
     pass
 
 
-# --- 2. Encoder Interface ---
-from typing import Protocol, Union, Sequence, runtime_checkable, Any
-import jax.numpy as jnp
 
 
 # ... State protocol remains same ...
+# --- 2. Encoder Interface ---
 
 @runtime_checkable
 class StateEncoder(Protocol):
@@ -31,8 +32,14 @@ class StateEncoder(Protocol):
         """
         ...
 
-    def decode(self, encoded_data: jnp.ndarray) -> 'State':
-        ...
+    @abstractmethod
+    def decode(self, encoded_data: jnp.ndarray) -> Union[State, List[State], Any]:
+        """
+        Converts JAX Array -> State(s).
+        Input: (D,) -> Returns Single State
+        Input: (N, D) -> Returns List[State]
+        """
+        pass
 
     def __eq__(self, other):
         # Value-based equality

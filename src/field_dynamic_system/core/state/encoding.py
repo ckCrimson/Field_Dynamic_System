@@ -41,9 +41,20 @@ class VectorEncoding(StateEncoder):
         # Handle list of states
         return jnp.array([s.values for s in data])
 
-    def decode(self, encoded_data: jnp.ndarray) -> State:
-        return VectorState(tuple(encoded_data.tolist()))
+    def decode(self, encoded_data: jnp.ndarray) -> Union[State, List[State]]:
+        """
+        Decodes JAX arrays back into VectorState objects.
+        Handles both (D,) and (N, D) inputs.
+        """
+        # 1. Handle Batch: (N, D) where N > 1
+        if encoded_data.ndim > 1:
+            # Convert to list of tuples first (faster iteration than JAX loop)
+            raw_rows = encoded_data.tolist()
+            return [VectorState(tuple(row)) for row in raw_rows]
 
+        # 2. Handle Single: (D,)
+        else:
+            return VectorState(tuple(encoded_data.tolist()))
     @property
     def shape(self) -> Tuple[int, ...]:
         return (self.dim,)
@@ -69,9 +80,20 @@ class BitMaskingEncoding(StateEncoder):
         except KeyError:
             raise TypeError(f"Object {data} not found in Discrete Registry or invalid type.")
 
-    def decode(self, data: jnp.ndarray) -> State:
-        idx = int(data.item())
-        return self.id_to_obj[idx]
+    def decode(self, data: jnp.ndarray) -> Union[State, List[State]]:
+        """
+        Decodes indices back to Objects.
+        Handles scalar index or array of indices.
+        """
+        # 1. Handle Batch: Array of indices [0, 5, 2...]
+        if data.ndim > 0 and data.size > 1:
+            indices = data.tolist() # Convert to Python list of ints
+            return [self.id_to_obj[int(i)] for i in indices]
+
+        # 2. Handle Single: Scalar array
+        else:
+            idx = int(data.item())
+            return self.id_to_obj[idx]
 
     @property
     def shape(self) -> tuple[int, ...]:
@@ -115,8 +137,21 @@ class IdentityEncoder(StateEncoder):
 
         return arr.astype(jnp.float32)
 
-    def decode(self, encoded_state: jnp.ndarray) -> Any:
+    def decode(self, encoded_data: jnp.ndarray) -> Union[Any, List[Any]]:
         """
-        Identity: Returns the vector as-is.
+        Reconstructs state objects (or raw vectors) from array.
         """
-        return encoded_state
+        # 1. Handle Batch
+        if encoded_data.ndim > 1 and encoded_data.shape[0] > 1:
+            # Input is (N, D) -> Return List of N states
+            # We return raw vectors for Identity, or wrap them if needed.
+            # For pure Continuous spaces, we usually return the vectors/tuples.
+
+            # Convert JAX array to standard Python list of vectors for usability
+            return [tuple(row) for row in encoded_data.tolist()]
+
+        # 2. Handle Single
+        else:
+            # Input is (D,) or (1, D)
+            flat = encoded_data.reshape(-1)
+            return tuple(flat.tolist())
