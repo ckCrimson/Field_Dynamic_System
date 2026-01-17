@@ -136,56 +136,101 @@ classDiagram
         +__hash__()
         +__eq__()
     }
-    class VectorState {
-        +values: tuple
-        +__add__()
+    class VectorState{
+
     }
-    class AbstractState {
-        +name: str
-        +properties: dict
+    class AbstracState{
+
+    }
+    class VectorEncoding{
+
+    }
+    class BitMaskingEncoding{
+
+    }
+    class IdentityEncoder{
+
     }
 
+    class DiscreteStateTransformation{
+
+    }
+    class ContinuousStateTransformation{
+
+    }
+
+
+
+
+    
     %% File: discrete.py
     class StateSpace { <<Interface>> }
-    class VectorStateSpace {
-        +dim: int
+    class IContinuousStateSpace { <<Interface>> }
+    class IDiscreteStateSpace { <<Interface>> }
+    class DiscreteStateSpace{}
+    class AbstractDiscreteStateSpace{}
+    class VectorStateSpace{ 
+        +filter_by_index(index,value)
     }
-    class AbstractDiscreteStateSpace {
-        +contains(name)
-    }
+    class IndexVectorStateSpace{
+        +select_index(indexes_list,values_list)
 
-    %% File: continous.py
-    class ContinuousStateSpace { <<Interface>> }
-    class HypercubeSpace {
-        +low: vector
-        +high: vector
     }
+    class ContinousStateSpace{}
+    class CompositeSpace{}
+
+    class StateEncoder { <<Interface>> 
+        +encode(State)
+        +decode()
+     }
+
 
     %% File: transformation.py
     class IStateSpaceTransformation {
         +transform(space)
     }
-    class VectorStateTransformation {
-        +operation: JAXFunc
+    
+    class VectorStateTransformation{
+
     }
-    class ParameterContinuousTransformation {
-        +scale: float
-        +translation: vector
+    class AbstractStateTransformation{
+
     }
 
-    %% Relationships
-    State <|-- VectorState
-    State <|-- AbstractState
 
-    StateSpace <|-- VectorStateSpace
-    StateSpace <|-- AbstractDiscreteStateSpace
-    StateSpace <|-- ContinuousStateSpace
+    State <| -- AbstracState
+    State <| -- VectorState
 
-    ContinuousStateSpace <|-- HypercubeSpace
+    StateSpace <| -- IDiscreteStateSpace
+    StateSpace <|-- IContinuousStateSpace
 
-    IStateSpaceTransformation <|-- VectorStateTransformation
-    IStateSpaceTransformation <|-- ParameterContinuousTransformation
+    IDiscreteStateSpace <| -- DiscreteStateSpace
+    DiscreteStateSpace <| -- AbstractDiscreteStateSpace
+    AbstractDiscreteStateSpace <| -- VectorStateSpace
+    VectorStateSpace <|-- IndexVectorStateSpace
+    IContinuousStateSpace <|-- ContinousStateSpace
+    ContinousStateSpace <|-- CompositeSpace
 
-    VectorStateSpace o-- VectorState : contains
-    AbstractDiscreteStateSpace o-- AbstractState : contains
+    StateEncoder <|-- VectorEncoding
+    StateEncoder <|-- BitMaskingEncoding
+    StateEncoder <|-- IdentityEncoder
+
+    IStateSpaceTransformation <|-- DiscreteStateTransformation
+    IStateSpaceTransformation <| -- ContinuousStateTransformation
+    DiscreteStateTransformation <| -- VectorStateTransformation
+    DiscreteStateTransformation <| -- AbstractStateTransformation
+
+    AbstractDiscreteStateSpace o-- AbstracState :contains
+    VectorStateSpace o-- VectorState: contains
+    VectorStateSpace o-- VectorEncoding: contains
+    AbstractDiscreteStateSpace o-- BitMaskingEncoding: contains
+    ContinousStateSpace o-- IdentityEncoder:contains
+    
+
+
+    StateSpace o-- StateEncoder :contains
+
+    IStateSpaceTransformation o-- StateSpace : contains
+
+    StateSpace o-- State : contains
 ```
