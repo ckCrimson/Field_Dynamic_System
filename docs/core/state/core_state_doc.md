@@ -2,7 +2,7 @@
 
 **Root Package:** `src.field_dynamic_system.core.state`
 
-This module defines the "Territory" of the system. It is composed of the following components based on your file structure.
+This module defines the "Territory" of the system. It is composed of the following components, reflecting the specific architecture of your system.
 
 ---
 
@@ -10,80 +10,75 @@ This module defines the "Territory" of the system. It is composed of the followi
 
 ### 📂 `interfaces.py`
 **The Contracts.** All other files depend on these base definitions.
-* **`StateSpace`**: Abstract base for all containers (Discrete or Continuous).
-* **`StateEncoder`**: Abstract base for translating Objects <-> Arrays.
-* **`IStateOperation`**: Interface for functions that modify states.
-* **`IStateSpaceTransformation`**: Interface for transforming entire spaces.
+* **`StateSpace`**: Root interface for all containers.
+* **`IDiscreteStateSpace`**: Interface specifically for countable/finite spaces.
+* **`IContinuousStateSpace`**: Interface specifically for geometric/infinite spaces.
+* **`StateEncoder`**: Interface for translating `State` objects to/from Arrays.
+* **`IStateSpaceTransformation`**: Interface for operations that transform one space into another.
 
 ### 📂 `state.py`
-**The Atoms.** Defines the actual point objects used in the system.
+**The Atoms.** Defines the actual point objects.
 
 | Class | Definition | Example Usage |
 | :--- | :--- | :--- |
-| **`VectorState`** | Immutable tuple wrapper. Supports `+` and `-` arithmetic. | `s = VectorState((1.0, 2.5))` |
-| **`AbstractState`** | Named object. Equality depends only on `name`. | `s = AbstractState("Paris", properties={"pop": 50})` |
+| **`State`** | Abstract base class. Defines hashing and equality. | N/A (Abstract) |
+| **`VectorState`** | Immutable tuple wrapper. | `s = VectorState((1.0, 2.5))` |
+| **`AbstractState`** | Named object. Equality depends only on `name`. | `s = AbstractState("Paris")` |
 
 ### 📂 `discrete.py`
-**Countable Spaces.** Collections of finite states.
+**Countable Spaces.** Organized by hierarchy.
 
-| Class | Definition | Example Usage |
+| Class | Definition | Key Features |
 | :--- | :--- | :--- |
-| **`VectorStateSpace`** | Set of `VectorState` objects. Enforces dimensions. | `space = VectorStateSpace([(0,0), (0,1)], dim=2)` |
-| **`AbstractDiscreteStateSpace`** | Set of `AbstractState` objects. Uses HashMap for speed. | `space = AbstractDiscreteStateSpace(["Start", "End"])` |
+| **`DiscreteStateSpace`** | Base implementation for finite spaces. | Basic iteration. |
+| **`AbstractDiscreteStateSpace`** | Stores `AbstractState` objects. | `contains(name)` |
+| **`VectorStateSpace`** | specialized `AbstractDiscreteStateSpace` for Vectors. | `filter_by_index(idx, val)` |
+| **`IndexVectorStateSpace`** | Specialized Vector space. | `select_index(indices, values)` |
 
 ### 📂 `continous.py`
-**Uncountable Spaces.** Geometric regions defined by bounds.
+**Uncountable Spaces.** Geometric regions.
 
 | Class | Definition | Example Usage |
 | :--- | :--- | :--- |
-| **`HypercubeSpace`** | A Box defined by min/max vectors. Snaps invalid points. | `box = HypercubeSpace(low=[0.0], high=[10.0])` |
-| **`HypersphereSpace`** | A Ball defined by center and radius. | `ball = HypersphereSpace(center=[0,0], radius=5.0)` |
-| **`ContinuousStateSpace`** | Base class. Supports CSG (Union/Intersection). | `complex_shape = box.union(ball)` |
-
-### 📂 `transformation.py`
-**Space Modifiers.** Tools to convert one space into another.
-
-| Class | Definition | Example Usage |
-| :--- | :--- | :--- |
-| **`VectorStateTransformation`** | Applies JAX function to every point in a grid. | `t = VectorStateTransformation(op=jax_func, target_class=VectorStateSpace)` |
-| **`AbstractStateTransformation`** | Applies Python function to every node in a graph. | `t = AbstractStateTransformation(op=rename_func)` |
-| **`ParameterContinuousTransformation`** | Shifts or scales the boundaries of a space. | `t = ParameterContinuousTransformation(scale=2.0, translation=jnp.array([1.]))` |
+| **`ContinousStateSpace`** | Base implementation for infinite manifolds. | N/A (Base Class) |
+| **`CompositeSpace`** | Combines spaces (Union/Intersection). | `shape = space_a.union(space_b)` |
 
 ### 📂 `encoding.py`
-**Translators.** Bridges the gap between Python Objects and JAX Arrays.
+**Translators.**
+
+| Class | Logic | Example Usage |
+| :--- | :--- | :--- |
+| **`IdentityEncoder`** | `(x, y) -> [x, y]` | `enc = IdentityEncoder(dim=2)` |
+| **`VectorEncoding`** | Optimized for VectorState lists. | `enc = VectorEncoding(dim=3)` |
+| **`BitMaskingEncoding`** | Maps arbitrary objects/names to bitmasks. | `enc = BitMaskingEncoding(dim=1, id_map={...})` |
+
+### 📂 `transformation.py`
+**Space Modifiers.**
 
 | Class | Definition | Example Usage |
 | :--- | :--- | :--- |
-| **`IdentityEncoder`** | Pass-through. `(x,y) -> [x,y]`. | `enc = IdentityEncoder(dim=2)` |
-| **`BitMaskingEncoder`** | Mapping. `"Name" -> Index`. | `enc = BitMaskingEncoder(dim=1, id_to_obj={0:"A"})` |
+| **`DiscreteStateTransformation`** | Base for transforming finite sets. | N/A (Base Class) |
+| **`ContinuousStateTransformation`** | Base for transforming manifolds. | N/A (Base Class) |
+| **`VectorStateTransformation`** | JAX-accelerated vector mapping. | `t = VectorStateTransformation(op=my_jax_func)` |
+| **`AbstractStateTransformation`** | Python-loop based node mapping. | `t = AbstractStateTransformation(op=my_py_func)` |
 
 ---
 
-## 2. Usage Recipes (Copy-Paste)
+## 2. Usage Recipes
 
-### Recipe A: Creating a Grid World
-*Files involved: `discrete.py`, `state.py`, `encoding.py`*
+### Recipe A: Advanced Filtering (IndexVectorStateSpace)
+*Using the specialized filtering capability.*
 
 ```python
-from src.field_dynamic_system.core.state.discrete import VectorStateSpace
-from src.field_dynamic_system.core.state.state import VectorState
-from src.field_dynamic_system.core.state.encoding import IdentityEncoder
+from src.field_dynamic_system.core.state.discrete import IndexVectorStateSpace, VectorState
 
-# 1. Create Data
-# We use tuples for raw data, VectorStateSpace converts them internally if needed
-raw_points = [(0, 0), (0, 1), (1, 0), (1, 1)]
+# 1. Create a space of 3D points
+points = [(1, 2, 3), (1, 5, 5), (2, 2, 2)]
+space = IndexVectorStateSpace(points, dim=3)
 
-# 2. Initialize Space
-grid = VectorStateSpace(
-    allowed_states=raw_points,
-    dim=2,
-    _encoding=IdentityEncoder(dim=2)
-)
-
-# 3. Check States
-s = VectorState((0, 1))
-print(f"Is (0,1) valid? {grid.contains(s)}")
-```
+# 2. Select specific indices (e.g., where x=1)
+# Assuming select_index takes a list of dimensions and list of target values
+subset = space.select_index([0], [1])
 
 ### Recipe B: Transforming a Grid (Shift Coordinates)
 *Files involved: `transformation.py`, `discrete.py`*
@@ -137,32 +132,21 @@ classDiagram
         +__eq__()
     }
     class VectorState{
-
     }
-    class AbstracState{
-
+    class AbstractState{
     }
     class VectorEncoding{
-
     }
     class BitMaskingEncoding{
-
     }
     class IdentityEncoder{
-
     }
 
     class DiscreteStateTransformation{
-
     }
     class ContinuousStateTransformation{
-
     }
 
-
-
-
-    
     %% File: discrete.py
     class StateSpace { <<Interface>> }
     class IContinuousStateSpace { <<Interface>> }
@@ -174,7 +158,6 @@ classDiagram
     }
     class IndexVectorStateSpace{
         +select_index(indexes_list,values_list)
-
     }
     class ContinousStateSpace{}
     class CompositeSpace{}
@@ -184,30 +167,28 @@ classDiagram
         +decode()
      }
 
-
     %% File: transformation.py
     class IStateSpaceTransformation {
         +transform(space)
     }
     
     class VectorStateTransformation{
-
     }
     class AbstractStateTransformation{
-
     }
 
+    %% Inheritance Relationships
+    State <|-- AbstractState
+    State <|-- VectorState
 
-    State <| -- AbstracState
-    State <| -- VectorState
-
-    StateSpace <| -- IDiscreteStateSpace
+    StateSpace <|-- IDiscreteStateSpace
     StateSpace <|-- IContinuousStateSpace
 
-    IDiscreteStateSpace <| -- DiscreteStateSpace
-    DiscreteStateSpace <| -- AbstractDiscreteStateSpace
-    AbstractDiscreteStateSpace <| -- VectorStateSpace
+    IDiscreteStateSpace <|-- DiscreteStateSpace
+    DiscreteStateSpace <|-- AbstractDiscreteStateSpace
+    AbstractDiscreteStateSpace <|-- VectorStateSpace
     VectorStateSpace <|-- IndexVectorStateSpace
+    
     IContinuousStateSpace <|-- ContinousStateSpace
     ContinousStateSpace <|-- CompositeSpace
 
@@ -216,21 +197,18 @@ classDiagram
     StateEncoder <|-- IdentityEncoder
 
     IStateSpaceTransformation <|-- DiscreteStateTransformation
-    IStateSpaceTransformation <| -- ContinuousStateTransformation
-    DiscreteStateTransformation <| -- VectorStateTransformation
-    DiscreteStateTransformation <| -- AbstractStateTransformation
+    IStateSpaceTransformation <|-- ContinuousStateTransformation
+    DiscreteStateTransformation <|-- VectorStateTransformation
+    DiscreteStateTransformation <|-- AbstractStateTransformation
 
-    AbstractDiscreteStateSpace o-- AbstracState :contains
+    %% Composition Relationships
+    AbstractDiscreteStateSpace o-- AbstractState :contains
     VectorStateSpace o-- VectorState: contains
     VectorStateSpace o-- VectorEncoding: contains
     AbstractDiscreteStateSpace o-- BitMaskingEncoding: contains
     ContinousStateSpace o-- IdentityEncoder:contains
     
-
-
     StateSpace o-- StateEncoder :contains
-
     IStateSpaceTransformation o-- StateSpace : contains
-
     StateSpace o-- State : contains
 ```
