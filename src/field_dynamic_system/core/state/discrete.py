@@ -10,292 +10,146 @@ from .encoding import BitMaskingEncoding, VectorEncoding
 from .state import VectorState  # Assuming VectorState is defined in vector.py or similar
 
 
-# --- Internal Helpers ---
 @dataclass
 class _BatchedVectorState:
-    """Internal wrapper to allow applying operations on the entire JAX matrix at once."""
     values: jnp.ndarray
 
 
 class AbstractDiscreteStateSpace(IDiscreteStateSpace):
     """
-    A Finite Set of AbstractStates (e.g. {Rock, Paper, Scissor}).
-    Uses Python Sets for fast O(1) membership checks.
+    Dynamic State Space.
+    Maintains a bijection between State Objects and Integer Indices.
     """
 
     def __init__(self,
                  states: Union[Set[Any], Sequence[Any]],
                  encoder: Optional[StateEncoder] = None):
 
-        # 1. Deduplicate
-        self.allowed_states = set(states)
+        # 1. Internal Storage
+        initial_list = sorted(list(set(states)), key=lambda x: str(x))
 
-        # 2. Sort for deterministic behavior (indices, encoding)
-        # We try to sort; if elements aren't comparable, we use string representation
-        try:
-            self._sorted_states = sorted(list(self.allowed_states))
-        except TypeError:
-            self._sorted_states = sorted(list(self.allowed_states), key=lambda x: str(x))
+        self._idx_to_state = []
+        self._state_to_idx = {}
 
-        self._num_states = len(self._sorted_states)
+        # 2. Encoder
+        self._encoder = encoder if encoder else BitMaskingEncoding(initial_list)
 
-        # 3. Encoder Strategy
-        if encoder is None:
-            self._encoder = BitMaskingEncoding(self._sorted_states)
-        else:
-            self._encoder = encoder
+        # 3. Populate
+        self.register_states(initial_list)
 
-    # --- Properties Required by IDiscreteStateSpace ---
+    # --- THE FIX: Dynamic Property ---
+    @property
+    def num_states(self) -> int:
+        """Always returns the current true count of registered states."""
+        return len(self._idx_to_state)
 
     @property
     def states(self) -> List[Any]:
-        return self._sorted_states
-
-    @property
-    def num_states(self) -> int:
-        return self._num_states
-
-    @property
-    def is_empty(self) -> bool:
-        return self._num_states == 0
+        return self._idx_to_state
 
     @property
     def encoder(self) -> StateEncoder:
         return self._encoder
 
-    @encoder.setter
-    def encoder(self, new_encoder: StateEncoder):
-        self._encoder = new_encoder
+    # --- Dynamic Registration ---
 
-    # --- Core Methods ---
+    def register_states(self, states_batch: Sequence[Any]) -> jnp.ndarray:
+        indices = []
+
+        for s in states_batch:
+            if s not in self._state_to_idx:
+                new_idx = len(self._idx_to_state)
+                self._state_to_idx[s] = new_idx
+                self._idx_to_state.append(s)
+                self._on_state_added(s)
+
+            indices.append(self._state_to_idx[s])
+
+        return jnp.array(indices, dtype=jnp.int32)
+
+    def add_state(self, state: Any) -> int:
+        return int(self.register_states([state])[0])
+
+    def _on_state_added(self, state):
+        pass
+
+    # --- Lookup ---
 
     def get_index_of(self, state_obj: Any) -> int:
-        """
-        Generic O(N) lookup.
-        Subclasses should override this if they can do better.
-        """
-        try:
-            return self._sorted_states.index(state_obj)
-        except ValueError:
-            return -1
-
-    def create_subset(self, states: List[Any]) -> 'AbstractDiscreteStateSpace':
-        """
-        Factory: Creates a new instance of the same class containing only these states.
-        """
-        # Uses self.__class__ so VectorStateSpace returns VectorStateSpace
-        return self.__class__(states)
+        return self._state_to_idx.get(state_obj, -1)
 
     def contains(self, state: Union[Any, Sequence[Any], jnp.ndarray]) -> Union[bool, jnp.ndarray]:
-        """
-        Checks membership.
-        - Arrays: Checked as Integer IDs (valid if 0 <= id < num_states).
-        - Objects/Lists: Checked against the internal Python Set.
-        """
-        # Case A: JAX Array (IDs)
         if isinstance(state, jnp.ndarray):
-            return (state >= 0) & (state < self._num_states)
-
-        # Case B: Python List (Batch)
+            return (state >= 0) & (state < self.num_states)
         if isinstance(state, (list, tuple)):
-            mask = [s in self.allowed_states for s in state]
-            return jnp.array(mask, dtype=bool)
+            return jnp.array([s in self._state_to_idx for s in state], dtype=bool)
+        return state in self._state_to_idx
 
-        # Case C: Single Object
-        return state in self.allowed_states
-
-    def get_matrix(self) -> jnp.ndarray:
-        """Returns column vector of indices [0, 1, 2...]"""
-        return jnp.arange(self._num_states, dtype=jnp.int32).reshape(-1, 1)
-
-    # --- Set Operations ---
+    # --- Set Ops ---
+    def create_subset(self, states: List[Any]) -> 'AbstractDiscreteStateSpace':
+        return self.__class__(states)
 
     def union(self, other: StateSpace) -> StateSpace:
         if isinstance(other, AbstractDiscreteStateSpace):
-            new_set = self.allowed_states | other.allowed_states
-            return self.create_subset(list(new_set))
-        raise TypeError(f"Cannot union AbstractDiscreteStateSpace with {type(other)}")
+            combined = list(set(self.states) | set(other.states))
+            return self.create_subset(combined)
+        raise TypeError(f"Cannot union with {type(other)}")
 
-    def intersection(self, other: StateSpace) -> StateSpace:
-        if isinstance(other, AbstractDiscreteStateSpace):
-            new_set = self.allowed_states & other.allowed_states
-            return self.create_subset(list(new_set))
-        raise TypeError(f"Cannot intersect AbstractDiscreteStateSpace with {type(other)}")
-
-    def map(self, operation: IStateOperation) -> List[Any]:
-        return [operation(s) for s in self._sorted_states]
-
-    # --- JAX Flattening ---
-
+    # --- Flattening ---
     def _tree_flatten(self):
-        children = ()
-        aux_data = (self.allowed_states, self._encoder)
-        return children, aux_data
+        return (), (self._idx_to_state, self._encoder)
 
     @classmethod
-    def _tree_unflatten(cls, aux_data, children):
-        allowed_states, encoder = aux_data
+    def _tree_unflatten(cls, aux, children):
+        states, encoder = aux
         obj = cls.__new__(cls)
-        # Re-initialize basic properties manually to bypass __init__ cost
-        obj.allowed_states = allowed_states
-        # Re-sort to maintain consistency
-        try:
-            obj._sorted_states = sorted(list(allowed_states))
-        except TypeError:
-            obj._sorted_states = sorted(list(allowed_states), key=str)
-        obj._num_states = len(obj._sorted_states)
+        obj._idx_to_state = []
+        obj._state_to_idx = {}
         obj._encoder = encoder
+        obj.register_states(states)
         return obj
 
 
 class VectorStateSpace(AbstractDiscreteStateSpace):
     """
-    A Finite Set of specific VectorStates (Geometric Points).
-    Optimized with JAX Matrices.
+    Dynamic Vector Space.
+    Updates the JAX matrix buffer when new vectors are registered.
     """
 
     def __init__(self, vectors: Sequence[VectorState], dim: int):
-        # 1. Validation & Deduplication
-        unique_vectors = tuple(set(vectors))
-
-        # Validate dimensions
-        for v in unique_vectors:
-            if len(v.values) != dim:
-                raise ValueError(f"Vector dim mismatch: expected {dim}, got {len(v.values)}")
-
-        # 2. Initialize Parent
-        super().__init__(list(unique_vectors))
-
-        # 3. Specific Setup
         self.dim = dim
-        self._encoder = VectorEncoding(dim)
+        self._matrix = jnp.zeros((0, dim), dtype=jnp.float32)
+        # super init calls register_states -> _on_state_added
+        super().__init__(vectors, encoder=VectorEncoding(dim))
 
-        # Pre-compute matrix for fast JAX ops
-        if self.allowed_states:
-            # Note: allowed_states holds VectorState objects
-            raw_list = [v.values for v in self._sorted_states]
-            self._matrix = jnp.array(raw_list, dtype=jnp.float32)
-        else:
-            self._matrix = jnp.zeros((0, dim), dtype=jnp.float32)
-
-    # --- Overrides for Vector Logic ---
+    def _on_state_added(self, state: VectorState):
+        """Called automatically by register_states when a new vector comes in."""
+        new_vec = jnp.array(state.values, dtype=jnp.float32).reshape(1, self.dim)
+        # Concatenate to keep matrix in sync with _idx_to_state
+        self._matrix = jnp.concatenate([self._matrix, new_vec], axis=0)
 
     def create_subset(self, states: List[VectorState]) -> 'VectorStateSpace':
-        """Required to pass 'dim' back to the constructor."""
         return VectorStateSpace(states, dim=self.dim)
 
-    def get_index_of(self, state_obj: Any) -> int:
-        """Optimized lookup: Identity first, then Value."""
-        # 1. Identity Check
-        idx = super().get_index_of(state_obj)
-        if idx != -1:
-            return idx
-
-        # 2. Value Check (Fallback)
-        target = state_obj.values if hasattr(state_obj, 'values') else state_obj
-
-        # Check cache if available (from Indexed subclass)
-        if hasattr(self, '_value_to_index'):
-            return self._value_to_index.get(target, -1)
-
-        # Linear scan
-        for i, s in enumerate(self._sorted_states):
-            if s.values == target:
-                return i
-        return -1
-
     def get_matrix(self) -> jnp.ndarray:
-        """Returns the actual (N, D) coordinate matrix, not just indices."""
         return self._matrix
 
-    def contains(self, state: Union[Any, Sequence[Any], jnp.ndarray]) -> Union[bool, jnp.ndarray]:
-        """Vectorized membership check."""
-        if isinstance(state, jnp.ndarray):
-            vecs = state
-        else:
-            # Attempt to encode python objects
-            vecs = self.encoder.encode(state)
-
-        if vecs.ndim == 1:
-            vecs = vecs[None, :]
-
-        if self._matrix.shape[0] == 0:
-            return jnp.zeros(vecs.shape[0], dtype=bool)
-
-        # Check distances
-        tolerance = 1e-5
-        # (M, 1, D) - (1, N, D) -> (M, N, D)
-        diff = jnp.abs(vecs[:, None, :] - self._matrix[None, :, :])
-        match = jnp.all(diff < tolerance, axis=-1)
-        is_valid = jnp.any(match, axis=-1)
-
-        if is_valid.shape == (1,):
-            return is_valid[0]
-        return is_valid
-
-    def union(self, other: StateSpace) -> StateSpace:
-        if isinstance(other, VectorStateSpace):
-            if self.dim != other.dim:
-                raise ValueError(f"Dim mismatch: {self.dim} vs {other.dim}")
-            # Use parent logic, but wrap in proper constructor
-            new_set = self.allowed_states | other.allowed_states
-            return VectorStateSpace(list(new_set), self.dim)
-        raise TypeError(f"Cannot union VectorStateSpace with {type(other)}")
-
-    def intersection(self, other: StateSpace) -> StateSpace:
-        if isinstance(other, VectorStateSpace):
-            if self.dim != other.dim:
-                raise ValueError(f"Dim mismatch: {self.dim} vs {other.dim}")
-            new_set = self.allowed_states & other.allowed_states
-            return VectorStateSpace(list(new_set), self.dim)
-        raise TypeError(f"Cannot intersect VectorStateSpace with {type(other)}")
-
-    def map(self, operation: IStateOperation) -> Any:
-        # Optimized: Pass the whole matrix to the operation
-        batched = _BatchedVectorState(self._matrix)
-        return operation(batched)
-
-    def filter_by_index(self, axis_idx: int, value: float, atol: float = 1e-6) -> 'VectorStateSpace':
-        """Returns subset where vector[axis] ~= value."""
-        if self._matrix.shape[0] == 0:
-            return self.create_subset([])
-
-        column = self._matrix[:, axis_idx]
-        mask = jnp.isclose(column, value, atol=atol)
-
-        # We need the objects corresponding to the rows
-        filtered_states = [self._sorted_states[i] for i in range(len(mask)) if mask[i]]
-        return self.create_subset(filtered_states)
-
-    # --- JAX Pytree Registration ---
+    # --- Pytree ---
     def _tree_flatten(self):
-        children = (self._matrix,)
-        # Must store dim to reconstruct
-        aux_data = (self.allowed_states, self.dim, self._encoder)
-        return children, aux_data
+        return (self._matrix,), (self._idx_to_state, self.dim, self._encoder)
 
     @classmethod
-    def _tree_unflatten(cls, aux_data, children):
-        allowed_states, dim, encoder = aux_data
+    def _tree_unflatten(cls, aux, children):
+        states, dim, encoder = aux
         matrix = children[0]
-
         obj = cls.__new__(cls)
-        # Restore AbstractDiscreteStateSpace properties
-        obj.allowed_states = allowed_states
-        # Ensure sorting logic matches init
-        try:
-            obj._sorted_states = sorted(list(allowed_states))
-        except TypeError:
-            obj._sorted_states = sorted(list(allowed_states), key=str)
-        obj._num_states = len(obj._sorted_states)
-
-        # Restore VectorStateSpace properties
         obj.dim = dim
+        obj._idx_to_state = states
+        # Rebuild dictionary lookup
+        obj._state_to_idx = {s: i for i, s in enumerate(states)}
         obj._encoder = encoder
         obj._matrix = matrix
         return obj
-
-
 class IndexedVectorStateSpace(VectorStateSpace):
     """
     An optimized VectorSpace that pre-builds lookup tables (Hash Maps).
