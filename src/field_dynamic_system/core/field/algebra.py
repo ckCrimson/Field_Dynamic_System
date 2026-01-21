@@ -1,94 +1,80 @@
 from abc import ABC, abstractmethod
-from typing import Any, Tuple
 import jax.numpy as jnp
 
-from .data import FieldValue
-from .compositions import AdditionComposition, MultiplicationComposition, InnerFieldProduct
-from .transform import NormFieldTransform
-from .stratergies import (
-    RealAddition, RealMultiplication, RealInnerProduct, RealNorm,
-    ComplexAddition, ComplexMultiplication, ComplexInnerProduct, ComplexNorm
-)
-
-
+# =========================================================
+# 1. INTERFACE
+# =========================================================
 class IFieldAlgebra(ABC):
-    """
-    Interface Definition.
-    Must define 'dtype' to handle memory allocation correctly.
-    """
-
-    @property
-    @abstractmethod
-    def dim(self) -> int: pass
-
-    @property
-    @abstractmethod
-    def dtype(self) -> Any: pass  # <--- CRITICAL PROPERTY
+    dim: int
+    dtype: jnp.dtype
 
     @abstractmethod
-    def add(self, a, b): pass
+    def add(self, a: jnp.ndarray, b: jnp.ndarray) -> jnp.ndarray: pass
 
     @abstractmethod
-    def mul(self, a, b): pass
+    def mul(self, a: jnp.ndarray, scalar: jnp.ndarray) -> jnp.ndarray: pass
 
     @abstractmethod
-    def inner_product(self, a, b): pass
+    def inner_product(self, a: jnp.ndarray, b: jnp.ndarray) -> jnp.ndarray: pass
 
     @abstractmethod
-    def norm(self, a): pass
+    def norm(self, a: jnp.ndarray) -> jnp.ndarray: pass
 
     @abstractmethod
-    def get_zero(self, shape=(1,)): pass
+    def get_zero(self, shape=(1,)) -> jnp.ndarray: pass
 
     @abstractmethod
-    def get_unity(self, shape=(1,)): pass
+    def get_unity(self, shape=(1,)) -> jnp.ndarray: pass
 
 
-class FieldAlgebra(IFieldAlgebra):
-    """
-    Abstract Base Aggregator.
-    """
-    _add_strategy: AdditionComposition
-    _mul_strategy: MultiplicationComposition
-    _inner_strategy: InnerFieldProduct
-    _norm_strategy: NormFieldTransform
+# =========================================================
+# 2. REAL FIELD ALGEBRA (Scalar)
+# =========================================================
+class RealFieldAlgebra(IFieldAlgebra):
+    def __init__(self, dtype=jnp.float64):
+        self.dim = 1
+        self.dtype = dtype
 
-    def add(self, a, b): return self._add_strategy.compose(a, b)
+    def add(self, a, b): return a + b
 
-    def mul(self, a, b): return self._mul_strategy.compose(a, b)
+    def mul(self, a, scalar): return a * scalar
 
-    def inner_product(self, a, b): return self._inner_strategy.compose(a, b)
+    def inner_product(self, a, b): return a * b
 
-    def norm(self, a): return self._norm_strategy.transform(a)
+    def norm(self, a): return jnp.abs(a)
 
-    def get_zero(self, shape=(1,)): return self._add_strategy.get_identity(shape)
+    def get_zero(self, shape=(1,)):
+        final_shape = shape + (self.dim,)
+        return jnp.zeros(final_shape, dtype=self.dtype)
 
-    def get_unity(self, shape=(1,)): return self._mul_strategy.get_identity(shape)
-
-
-# --- Concrete Assemblers ---
-
-class RealFieldAlgebra(FieldAlgebra):
-    _add_strategy = RealAddition()
-    _mul_strategy = RealMultiplication()
-    _inner_strategy = RealInnerProduct()
-    _norm_strategy = RealNorm()
-
-    @property
-    def dim(self) -> int: return 1
-
-    @property
-    def dtype(self): return jnp.float64  # <--- Real Fields use Float
+    def get_unity(self, shape=(1,)):
+        final_shape = shape + (self.dim,)
+        return jnp.ones(final_shape, dtype=self.dtype)
 
 
-class ComplexFieldAlgebra(FieldAlgebra):
-    _add_strategy = ComplexAddition()
-    _mul_strategy = ComplexMultiplication()
-    _inner_strategy = ComplexInnerProduct()
-    _norm_strategy = ComplexNorm()
+# =========================================================
+# 3. VECTOR FIELD ALGEBRA (Dim N)
+# =========================================================
+class VectorFieldAlgebra(IFieldAlgebra):
+    def __init__(self, dim=3, dtype=jnp.float64):
+        self.dim = dim
+        self.dtype = dtype
 
-    @property
-    def dim(self) -> int: return 1
+    def add(self, a, b): return a + b
 
-    @property
-    def dtype(self): return jnp.complex128  # <--- Complex Fields use Complex
+    def mul(self, a, scalar): return a * scalar
+
+    def inner_product(self, a, b):
+        return jnp.sum(a * b, axis=-1, keepdims=True)
+
+    def norm(self, a):
+        # Direct JAX implementation breaks the dependency on Transform class
+        return jnp.linalg.norm(a, axis=-1, keepdims=True)
+
+    def get_zero(self, shape=(1,)):
+        final_shape = shape + (self.dim,)
+        return jnp.zeros(final_shape, dtype=self.dtype)
+
+    def get_unity(self, shape=(1,)):
+        final_shape = shape + (self.dim,)
+        return jnp.ones(final_shape, dtype=self.dtype)

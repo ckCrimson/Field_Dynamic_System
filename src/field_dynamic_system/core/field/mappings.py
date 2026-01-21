@@ -86,18 +86,13 @@ class DiscreteFieldMapper(IFieldMapper):
         stack_vals = jnp.stack([m.explicit_buffer for m in mappers])
         stack_mask = jnp.stack([m.mask_buffer for m in mappers])
 
-        # We need to manually construct the result, assuming op_name behavior
-        # Since Algebra is a template, we perform raw JAX ops here for speed
         if op_name == "__add__":
             new_buffer = jnp.sum(stack_vals, axis=0)
         elif op_name == "__mul__":
             new_buffer = jnp.prod(stack_vals, axis=0)
         else:
-            # Fallback (Slow path via algebra if needed, but here we keep it raw for speed)
             new_buffer = stack_vals[0]
             for i in range(1, len(stack_vals)):
-                # This assumes simple addition if fallback is hit, strictly needs Algebra logic
-                # For now, default to addition to prevent crash
                 new_buffer = new_buffer + stack_vals[i]
 
         new_mask = jnp.any(stack_mask, axis=0)
@@ -125,7 +120,6 @@ class DiscreteFieldMapper(IFieldMapper):
             indices = self.state_space.register_states([query])
 
         raw = self._get_batch(indices)
-        # FIX: Wrap in FieldValue container, not Algebra Class
         return [FieldValue(row) for row in raw]
 
     @jit
@@ -155,7 +149,6 @@ class DiscreteFieldMapper(IFieldMapper):
 
     @classmethod
     def tree_unflatten(cls, aux, children):
-        # FIX: Correctly unpack aux to match __init__ signature
         state_space, algebra, bg_func = aux
         return cls(state_space, algebra, explicit_buffer=children[0], mask_buffer=children[1], bg_func=bg_func)
 
@@ -207,20 +200,19 @@ class ContinuousFieldMapper(IFieldMapper):
         first = mappers[0]
 
         def batch_bg(state):
-            # Optimistic addition/multiplication assuming standard algebra
             results = [m.background_func(state) for m in mappers]
             stack_res = jnp.stack(results)
             if op_name == "__add__":
                 return jnp.sum(stack_res, axis=0)
             elif op_name == "__mul__":
                 return jnp.prod(stack_res, axis=0)
-            return results[0]  # Fallback
+            return results[0]
 
         new_cache = {}
         all_keys = set().union(*[m.sparse_cache.keys() for m in mappers])
 
         for s in all_keys:
-            vals = [m.get_fields_at(s)[0].value for m in mappers]  # Get Raw Values
+            vals = [m.get_fields_at(s)[0].value for m in mappers]
             stack_vals = jnp.stack(vals)
             if op_name == "__add__":
                 res = jnp.sum(stack_vals, axis=0)
@@ -237,12 +229,22 @@ class ContinuousFieldMapper(IFieldMapper):
         targets = query if isinstance(query, (list, tuple)) else [query]
         results = []
         for state in targets:
+            # 1. Check Sparse Cache (Dictionary)
             if state in self.sparse_cache:
                 raw = self.sparse_cache[state]
             else:
+                # 2. Compute Background
                 inp = state.values if hasattr(state, 'values') else state
-                raw = self.background_func(jnp.atleast_2d(jnp.array(inp)))[0]
-            # FIX: Wrap in FieldValue container
+
+                try:
+                    # OPTIMISTIC: Try to convert to JAX array (Vector/Coord)
+                    inp_arr = jnp.atleast_2d(jnp.array(inp))
+                    raw = self.background_func(inp_arr)[0]
+                except (TypeError, ValueError):
+                    # FALLBACK: If state is a String/Object, pass raw to function
+                    # The function must be able to handle this type.
+                    raw = self.background_func(inp)[0]
+
             results.append(FieldValue(raw))
         return results
 
