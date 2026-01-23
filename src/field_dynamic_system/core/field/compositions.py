@@ -1,48 +1,91 @@
 from abc import ABC, abstractmethod
-from typing import Tuple, Generic, TypeVar
-from .data import FieldValue, RealFieldValue
+import jax.numpy as jnp
 
-T_In = TypeVar("T_In", bound=FieldValue)
-T_Out = TypeVar("T_Out", bound=FieldValue)
 
-# --- 1. Generalized (Root) ---
-class GeneralizedFieldComposition(ABC, Generic[T_In, T_Out]):
+# =========================================================
+# 1. ROOT: Generic Field Composition (alpha)
+# =========================================================
+class FieldComposition(ABC):
     """
-    Abstract Binary Operation: f1 x f2 -> f3
-    Can map to any output type.
+    Represents the operator 'alpha': f_v1 alpha f_v2 = f_v3
+    Generic: Inputs and Outputs can be anything.
     """
+
     @abstractmethod
-    def compose(self, fv_1: T_In, fv_2: T_In) -> T_Out: pass
+    def compose(self, a: jnp.ndarray, b: jnp.ndarray) -> jnp.ndarray:
+        """
+        The mathematical kernel.
+        Must be compatible with JAX broadcasting/vectorization.
+        """
+        pass
 
 
-# --- 2. Contained (Inherits Generalized) ---
-class ContainedFieldComposition(GeneralizedFieldComposition[T_In, T_Out]):
+# =========================================================
+# 2. CONTAINED (beta): Same Input Types
+# =========================================================
+class ContainedFieldComposition(FieldComposition):
     """
-    Constraint: Inputs are same type. Output can be different.
-    Used for: Metrics, Inner Products.
+    Represents the operator 'beta': f_v1 beta f_v2 = f_v3
+    Constraint: Type(f_v1) == Type(f_v2).
     """
     pass
 
-class InnerFieldProduct(ContainedFieldComposition[T_In, RealFieldValue]):
+
+# =========================================================
+# 3. CONTAINED PRODUCT: Same Input -> Real Output
+# =========================================================
+class ContainedProduct(ContainedFieldComposition):
     """
-    Specific Contained Op: f x f -> RealFieldValue
+    Maps two similar fields to a Real (Scalar) Field.
+    Output dim is always 1.
     """
     pass
 
 
-# --- 3. Closed (Inherits Contained) ---
-class ClosedFieldComposition(ContainedFieldComposition[T_In, T_In]):
+class InnerProductComposition(ContainedProduct):
     """
-    Constraint: Inputs and Output are SAME type.
-    Must define Identity.
+    Standard Dot Product <u, v>.
+    Linearity is assumed but not enforced at runtime for performance.
     """
+
+    def compose(self, a: jnp.ndarray, b: jnp.ndarray) -> jnp.ndarray:
+        # Sum over the last axis (feature dimension)
+        # keepdims=True ensures result is (N, 1) not (N,)
+        return jnp.sum(a * b, axis=-1, keepdims=True)
+
+
+# =========================================================
+# 4. CLOSED: Same Input -> Same Output (Monoid)
+# =========================================================
+class ClosedFieldComposition(ContainedFieldComposition):
+    """
+    Input and Output are the same type.
+    Must define an Identity element (e.g., 0 for +, 1 for *).
+    """
+
     @abstractmethod
-    def get_identity(self, shape: Tuple[int, ...]) -> T_In: pass
+    def get_identity(self, shape: tuple, dtype=jnp.float64) -> jnp.ndarray:
+        """Returns the neutral element for this composition."""
+        pass
 
-class AdditionComposition(ClosedFieldComposition[T_In]):
-    """Defines Additive Group structure (Zero)."""
-    pass
 
-class MultiplicationComposition(ClosedFieldComposition[T_In]):
-    """Defines Multiplicative Ring structure (Unity)."""
-    pass
+class AdditionComposition(ClosedFieldComposition):
+    """ Element-wise Addition (+) """
+
+    def compose(self, a: jnp.ndarray, b: jnp.ndarray) -> jnp.ndarray:
+        return a + b
+
+    def get_identity(self, shape: tuple, dtype=jnp.float64) -> jnp.ndarray:
+        # Additive Identity: Zero
+        return jnp.zeros(shape, dtype=dtype)
+
+
+class MultiplicationComposition(ClosedFieldComposition):
+    """ Element-wise Multiplication (x) """
+
+    def compose(self, a: jnp.ndarray, b: jnp.ndarray) -> jnp.ndarray:
+        return a * b
+
+    def get_identity(self, shape: tuple, dtype=jnp.float64) -> jnp.ndarray:
+        # Multiplicative Identity: One
+        return jnp.ones(shape, dtype=dtype)

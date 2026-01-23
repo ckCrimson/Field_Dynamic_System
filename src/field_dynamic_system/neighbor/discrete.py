@@ -150,6 +150,89 @@ class DiscreteTopology(Topology):
         # Type hint update: Matrix is now a Sparse Object
         self._adjacency_matrix: Optional[sparse.BCOO] = None
 
+        # =========================================================
+        # 1. RAW DATA KERNELS (The Fast Path)
+        # =========================================================
+
+    def get_raw_successor(self, state_indices: jnp.ndarray) -> jnp.ndarray:
+            """
+            Input:  Indices of current states [i, k, ...]
+            Output: Indices of ALL immediate neighbors (Unique).
+            """
+            # Convert indices to a "Wavefront" vector
+            N = self.discrete_space.num_states
+            x = jnp.zeros(N, dtype=jnp.float32)
+
+            # Mark current states as active (1.0)
+            x = x.at[state_indices].set(1.0)
+
+            # Matrix Multiply: (1, N) @ (N, N) -> (1, N)
+            # We use A.T because we store Rows=Source, Cols=Target
+            # Flow: Source -> Target
+            A = self.adjacency_matrix
+
+            # Note: BCOO matmul logic:
+            # A @ v -> Standard transform
+            # If A[i, j] = 1 implies i->j.
+            # If x has 1 at i. x @ A -> result has 1 at j.
+            # JAX sparse usually assumes A @ x.
+            # Let's check dimensions: (N, N) @ (N, 1) -> (N, 1).
+            # So we treat x as column vector.
+
+            next_x = A.T @ x  # Or A.transpose() @ x depending on JAX version
+
+            # Return indices where value > 0
+            return jnp.where(next_x > 0)[0]
+
+    def get_raw_predecessor(self, state_indices: jnp.ndarray) -> jnp.ndarray:
+            """
+            Input: Indices of target states.
+            Output: Indices of states that can REACH the targets.
+            """
+            # Predecessors are just Successors on the Transposed Graph.
+            # If A[i, j] = 1 (i->j), then A.T[j, i] = 1 (j<-i).
+
+            N = self.discrete_space.num_states
+            x = jnp.zeros(N, dtype=jnp.float32)
+            x = x.at[state_indices].set(1.0)
+
+            A = self.adjacency_matrix
+
+            # Flow Backwards: Use A instead of A.T (or vice versa depending on definition)
+            # If A.T moves forward (Source->Target), then A moves backward (Target->Source).
+            prev_x = A @ x
+
+            return jnp.where(prev_x > 0)[0]
+
+    def get_raw_multi_step_successor(self, initial_indices: jnp.ndarray, steps: int) -> jnp.ndarray:
+            """
+            Input: Indices of start states.
+            Output: Indices of states reachable after 'steps' transitions.
+            """
+            if steps == 0: return initial_indices
+
+            N = self.discrete_space.num_states
+            x = jnp.zeros(N, dtype=jnp.float32)
+            x = x.at[initial_indices].set(1.0)
+
+            A = self.adjacency_matrix
+
+            # JIT-compiled loop
+            def body_fun(i, current_x):
+                # Propagate flow
+                next_val = A.T @ current_x
+                # Binarize to prevent explosion/overflow, keep it as "Reachable Mask"
+                return (next_val > 0.0).astype(jnp.float32)
+
+            final_x = jax.lax.fori_loop(0, steps, body_fun, x)
+
+            return jnp.where(final_x > 0)[0]
+
+        # =========================================================
+        # 2. OBJECT LAYER (The User Interface)
+        # =========================================================
+
+
     @abstractmethod
     def compute_neighbors(self, state: Any) -> Sequence[Any]:
         """User implements this. Unchanged."""
@@ -203,6 +286,8 @@ class DiscreteTopology(Topology):
         # Consolidate duplicates (e.g. if logic returns same neighbor twice)
         mat = mat.sum_duplicates()
         return mat
+
+
 
     # --- IMPLEMENTING ITopology CONTRACT ---
 

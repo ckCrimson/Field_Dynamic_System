@@ -68,13 +68,13 @@ def run_norm_benchmark():
     print("running Vectorized Transform (JAX)...")
 
     # Warmup
-    _ = FieldSpaceTransformer.apply(mapper_vec, transform_op)
+    _ = FieldSpaceTransformer.apply(mapper_vec, transform_op,algebra_vec)
     random_buffer.block_until_ready()
 
     start_time = time.perf_counter()
 
     # The Actual Transformation
-    mapper_scalar = FieldSpaceTransformer.apply(mapper_vec, transform_op)
+    mapper_scalar = FieldSpaceTransformer.apply(mapper_vec, transform_op,RealFieldAlgebra())
 
     mapper_scalar.explicit_buffer.block_until_ready()
 

@@ -43,7 +43,7 @@ def run_benchmark():
     c, s = np.cos(theta), np.sin(theta)
     rotation_matrix = jnp.array([[c, -s], [s, c]])  # (2, 2)
 
-    transform_op = LinearTransform(rotation_matrix, VectorFieldAlgebra)
+    transform_op = LinearTransform(rotation_matrix)
 
     print(f"-> Setup Complete. Rotation Angle: {theta:.2f} rad")
     print("---------------------------------------------------------")
@@ -80,14 +80,14 @@ def run_benchmark():
     print("running Vectorized Transform (JAX)...")
 
     # Warmup (Compile JIT)
-    _ = FieldSpaceTransformer.apply(mapper, transform_op)
+    _ = FieldSpaceTransformer.apply(mapper, transform_op ,VectorFieldAlgebra())
 
     # Sync and Start Timer
     random_buffer.block_until_ready()
     start_time = time.perf_counter()
 
     # The Actual Operation
-    result_mapper = FieldSpaceTransformer.apply(mapper, transform_op)
+    result_mapper = FieldSpaceTransformer.apply(mapper, transform_op, VectorFieldAlgebra())
 
     # Force computation to finish
     result_mapper.explicit_buffer.block_until_ready()

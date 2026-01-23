@@ -40,9 +40,9 @@ def test_override_background_transform():
     #   Background: 10.0 + 1 = 11.0
     # ---------------------------------------------------------
     print("  -> Scene A: Standard Composition (No Override)")
-    op_add = NonLinearTransform(lambda x: x + 1.0, RealFieldAlgebra)
+    op_add = NonLinearTransform(lambda x: x + 1.0)
 
-    res_A = FieldSpaceTransformer.apply(mapper, op_add)
+    res_A = FieldSpaceTransformer.apply(mapper, op_add,RealFieldAlgebra())
 
     val_explicit_A = res_A.get_fields_at("explicit_point")[0].value
     val_bg_A = res_A.get_fields_at("background_point")[0].value
@@ -65,7 +65,7 @@ def test_override_background_transform():
         N = state.shape[0] if hasattr(state, 'shape') else 1
         return jnp.full((N, 1), -99.0)
 
-    res_B = FieldSpaceTransformer.apply(mapper, op_add, override_bg_func=override_bg)
+    res_B = FieldSpaceTransformer.apply(mapper, op_add, RealFieldAlgebra(),override_bg_func=override_bg)
 
     val_explicit_B = res_B.get_fields_at("explicit_point")[0].value
     val_bg_B = res_B.get_fields_at("background_point")[0].value
