@@ -31,7 +31,7 @@ class IFieldMapper(ABC):
 
 
 # =========================================================
-# 2. DISCRETE ENGINE
+# 2. DISCRETE ENGINE (The "Grid")
 # =========================================================
 @register_pytree_node_class
 class DiscreteFieldMapper(IFieldMapper):
@@ -99,18 +99,6 @@ class DiscreteFieldMapper(IFieldMapper):
         return cls(first.state_space, first.algebra, explicit_buffer=new_buffer, mask_buffer=new_mask)
 
     # --- CORE LOGIC ---
-    def _ensure_capacity(self, required_idx):
-        current_size = self.explicit_buffer.shape[0]
-        if required_idx < current_size: return
-
-        new_size = self.state_space.num_states
-        diff = new_size - current_size
-        if diff > 0:
-            val_pad = jnp.zeros((diff, self.dim), dtype=self.dtype)
-            mask_pad = jnp.zeros((diff, 1), dtype=bool)
-            self.explicit_buffer = jnp.vstack([self.explicit_buffer, val_pad])
-            self.mask_buffer = jnp.vstack([self.mask_buffer, mask_pad])
-
     def get_fields_at(self, query):
         if isinstance(query, (list, tuple)):
             indices = self.state_space.register_states(query)
@@ -152,9 +140,53 @@ class DiscreteFieldMapper(IFieldMapper):
         state_space, algebra, bg_func = aux
         return cls(state_space, algebra, explicit_buffer=children[0], mask_buffer=children[1], bg_func=bg_func)
 
+    # --- NEW OPTIMIZED METHODS (Vector Mode) ---
+
+    @property
+    def raw_buffer(self) -> jnp.ndarray:
+        """DIRECT ACCESS: Returns the underlying JAX array (READ)."""
+        return self.explicit_buffer
+
+    def apply_vector(self, new_vector: jnp.ndarray):
+        """FAST UPDATE: Overwrites the field with physics results (WRITE)."""
+        current_len = self.explicit_buffer.shape[0]
+        new_len = new_vector.shape[0]
+
+        if new_len > current_len:
+            self._ensure_capacity(new_len - 1, force_size=new_len)
+        elif new_len < current_len:
+            self.explicit_buffer = self.explicit_buffer.at[:new_len].set(new_vector)
+            return
+
+        self.explicit_buffer = new_vector
+        self.mask_buffer = jnp.ones((new_len, 1), dtype=bool)
+
+    def sync_size(self, target_size: int):
+        """Pre-allocates buffer to prevent jittery resizing."""
+        if target_size > self.explicit_buffer.shape[0]:
+            self._ensure_capacity(target_size - 1, force_size=target_size)
+
+    def _ensure_capacity(self, required_idx, force_size=None):
+        """Internal Helper: Resizes buffer if needed."""
+        current_size = self.explicit_buffer.shape[0]
+        if required_idx < current_size and force_size is None:
+            return
+
+        # Determine new size
+        desired_size = self.state_space.num_states if force_size is None else force_size
+        if required_idx >= desired_size:
+            desired_size = max(desired_size, required_idx + 1)
+
+        diff = desired_size - current_size
+        if diff > 0:
+            val_pad = jnp.zeros((diff, self.dim), dtype=self.dtype)
+            mask_pad = jnp.zeros((diff, 1), dtype=bool)
+            self.explicit_buffer = jnp.vstack([self.explicit_buffer, val_pad])
+            self.mask_buffer = jnp.vstack([self.mask_buffer, mask_pad])
+
 
 # =========================================================
-# 3. CONTINUOUS ENGINE
+# 3. CONTINUOUS ENGINE (The "Wind")
 # =========================================================
 @register_pytree_node_class
 class ContinuousFieldMapper(IFieldMapper):
@@ -235,22 +267,21 @@ class ContinuousFieldMapper(IFieldMapper):
             else:
                 # 2. Compute Background
                 inp = state.values if hasattr(state, 'values') else state
-
                 try:
-                    # OPTIMISTIC: Try to convert to JAX array (Vector/Coord)
+                    # Try to convert to JAX array (Vector/Coord)
                     inp_arr = jnp.atleast_2d(jnp.array(inp))
                     raw = self.background_func(inp_arr)[0]
                 except (TypeError, ValueError):
-                    # FALLBACK: If state is a String/Object, pass raw to function
-                    # The function must be able to handle this type.
+                    # Fallback for String/Object inputs
                     raw = self.background_func(inp)[0]
 
             results.append(FieldValue(raw))
         return results
 
     def set_value_at(self, state, value):
-        if hasattr(self.state_space, 'register_states'):
-            self.state_space.register_states([state])
+        # --- FIXED: Removed problematic register_states call ---
+        # Continuous spaces cannot register states (they are infinite).
+        # We simply cache the value for this coordinate.
 
         self.sparse_cache[state] = jnp.array(extract_val(value), dtype=self.dtype)
         return self
@@ -265,6 +296,27 @@ class ContinuousFieldMapper(IFieldMapper):
     @classmethod
     def tree_unflatten(cls, aux, _):
         return cls(*aux)
+
+    # --- NEW OPTIMIZED METHODS (Vector Mode) ---
+
+    def get_raw_batch(self, coords: jnp.ndarray) -> jnp.ndarray:
+        """FAST EVALUATION: Evaluates function on N coordinates instantly."""
+        # 1. Functional Evaluation (The fast path)
+        base_values = self.background_func(coords)
+
+        # 2. Sparse Overlay
+        if not self.sparse_cache:
+            return base_values
+
+        # Note: We return base values for physics speed.
+        # Use get_fields_at() if you need specific point overrides.
+        return base_values
+
+    def batch_update_particles(self, particle_coords: jnp.ndarray, values: jnp.ndarray):
+        raise NotImplementedError(
+            "For mutable particles, use a DiscreteFieldMapper where states represent 'Particle Indices'. "
+            "ContinuousFieldMapper is optimized for Functional/Background fields."
+        )
 
 
 # =========================================================

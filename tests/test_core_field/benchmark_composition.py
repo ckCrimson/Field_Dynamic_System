@@ -70,7 +70,7 @@ def run_composition_benchmark():
     # -------------------------------------------------
     # 3. COMPETITOR B: FieldSpaceComposer (Vectorized)
     # -------------------------------------------------
-    print("running FieldSpaceComposer (JAX)...")
+    print("running FieldSpaceComposer (Aligned)...")
 
     # Warmup
     _ = FieldSpaceComposer.compose(f1, f2, op_add, algebra)
@@ -89,10 +89,10 @@ def run_composition_benchmark():
     print(f"🏆 Speedup Factor: {speedup:.2f}x")
 
     # =========================================================
-    # PART 2: UNALIGNED SPACES (The Real Challenge)
+    # PART 2: UNALIGNED SPACES (Symbolic / Object Overhead)
     # =========================================================
     print("\n=========================================================")
-    print("🚀 BENCHMARK PART 2: Unaligned Spaces (Subset Intersection)")
+    print("🚀 BENCHMARK PART 2: Unaligned Spaces (Symbolic Join)")
     print("=========================================================")
 
     # Scenario:
@@ -129,7 +129,6 @@ def run_composition_benchmark():
     # -------------------------------------------------
     print("running Python Dict Join (Hash Map)...")
 
-    # Convert to standard Python lists/arrays for fairness
     list_states_a = list(range_a)
     list_states_b = list(range_b)
     arr_a = np.array(buf_a)
@@ -139,19 +138,14 @@ def run_composition_benchmark():
 
     # Naive Logic: Build Dict, Sum collisions
     merged_data = {}
-
-    # Insert A
     for i, s in enumerate(list_states_a):
         merged_data[s] = arr_a[i]
-
-    # Insert/Add B
     for i, s in enumerate(list_states_b):
         if s in merged_data:
-            merged_data[s] = merged_data[s] + arr_b[i]
+            merged_data[s] += arr_b[i]
         else:
             merged_data[s] = arr_b[i]
 
-    # Convert back to list (to simulate finishing the job)
     final_res_py = list(merged_data.values())
 
     end_time = time.perf_counter()
@@ -159,109 +153,88 @@ def run_composition_benchmark():
     print(f"⏱️ Python Dict Time: {time_seq_unaligned:.5f} sec")
 
     # -------------------------------------------------
-    # 5. COMPETITOR B: FieldSpaceComposer (Symbolic Join)
+    # 5. COMPETITOR B: FieldSpaceComposer (Symbolic Wrapper)
     # -------------------------------------------------
-    print("running FieldSpaceComposer (Symbolic Join)...")
+    print("running FieldSpaceComposer.compose (Object Wrapper)...")
 
-    # Warmup (JIT Compilation of Scatter kernels)
+    # Warmup
     _ = FieldSpaceComposer.compose(field_a, field_b, op_add, algebra)
-    buf_a.block_until_ready()
 
     start_time = time.perf_counter()
 
-    # The Operation: Set Intersection -> Index Map -> Scatter -> Add
+    # This includes Python overhead (Set intersections etc.)
     f_res_unaligned = FieldSpaceComposer.compose(field_a, field_b, op_add, algebra)
     f_res_unaligned.explicit_buffer.block_until_ready()
 
     end_time = time.perf_counter()
-    time_vec_unaligned = end_time - start_time
-    print(f"⏱️ JAX Symbolic Time: {time_vec_unaligned:.5f} sec")
-
-    # -------------------------------------------------
-    # RESULTS
-    # -------------------------------------------------
-    print("---------------------------------------------------------")
-    speedup_unaligned = time_seq_unaligned / time_vec_unaligned
-    print(f"🏆 Speedup Factor: {speedup_unaligned:.2f}x")
-
-    # Verify correctness (checking size)
-    # Union of [0..50k] and [25k..75k] is [0..75k] -> 75,000 states
-    expected_size = 75_000
-    actual_size = f_res_unaligned.state_space.num_states
-
-    if actual_size == expected_size:
-        print(f"✅ Correctness Verified (Union Size: {actual_size})")
-    else:
-        print(f"❌ ERROR: Size Mismatch. Expected {expected_size}, got {actual_size}")
-    # ... (Previous code) ...
+    time_obj_unaligned = end_time - start_time
+    print(f"⏱️ Object Wrapper Time: {time_obj_unaligned:.5f} sec")
 
     # =========================================================
-    # PART 3: RAW UNALIGNED (The Simulation Engine)
+    # PART 3: RAW SPARSE KERNEL (The Simulation Engine)
     # =========================================================
     print("\n=========================================================")
-    print("🚀 BENCHMARK PART 3: Raw Unaligned (Global Index Join)")
+    print("🚀 BENCHMARK PART 3: Raw Sparse Kernel (compose_raw)")
     print("=========================================================")
-    print("Simulating the 'Universe Pattern' used in the loop...")
+    print("Simulating the 'Sparse Loop' (Merging ID lists)...")
 
-    # Scenario:
-    # We assume 'space_a' and 'space_b' are subsets of a Master Universe.
-    # We pre-calculate their indices ONCE (Simulation Setup Phase).
+    # Input: Raw Integer IDs and Values
+    # We pretend we already mapped states to integers (0..50k and 25k..75k)
+    ids_a_raw = jnp.arange(0, SIZE_A)
+    ids_b_raw = jnp.arange(OFFSET_B, OFFSET_B + SIZE_B)
 
-    # Universe Size = 75,000 (0 to 75k)
-    UNIVERSE_SIZE = 75_000
-
-    # Indices for A: 0 to 50,000
-    indices_a_raw = jnp.arange(0, SIZE_A)
-
-    # Indices for B: 25,000 to 75,000
-    indices_b_raw = jnp.arange(OFFSET_B, OFFSET_B + SIZE_B)
-
-    # Buffers (Reuse from Part 2)
-    # Ensure they are on device
+    # Ensure on device
+    ids_a_raw.block_until_ready()
+    ids_b_raw.block_until_ready()
     buf_a.block_until_ready()
     buf_b.block_until_ready()
 
-    print("-> Setup Complete (Indices Pre-Calculated).")
-    print("---------------------------------------------------------")
-
-    print("running FieldSpaceComposer.compose_unaligned_raw...")
+    print("running FieldSpaceComposer.compose_raw...")
 
     # Warmup
-    _ = FieldSpaceComposer.compose_unaligned_raw(
-        buf_a, indices_a_raw,
-        buf_b, indices_b_raw,
-        UNIVERSE_SIZE, op_add
+    _ = FieldSpaceComposer.compose_raw(
+        ids_a_raw, buf_a,
+        ids_b_raw, buf_b,
+        op_add
     )
 
     start_time = time.perf_counter()
 
-    # THIS is what runs in your loop
-    res_raw = FieldSpaceComposer.compose_unaligned_raw(
-        buf_a, indices_a_raw,
-        buf_b, indices_b_raw,
-        UNIVERSE_SIZE, op_add
+    # THIS is what runs in your loop:
+    # (IDs, Vals) + (IDs, Vals) -> (MergedIDs, MergedVals)
+    unique_ids, merged_vals = FieldSpaceComposer.compose_raw(
+        ids_a_raw, buf_a,
+        ids_b_raw, buf_b,
+        op_add
     )
-    res_raw.block_until_ready()
+    merged_vals.block_until_ready()
 
     end_time = time.perf_counter()
     time_raw = end_time - start_time
 
-    print(f"⏱️ JAX Raw Index Time: {time_raw:.5f} sec")
+    print(f"⏱️ JAX Sparse Kernel Time: {time_raw:.5f} sec")
 
-    # Compare against Python Dict (from Part 2)
+    # Compare against Python Dict (Part 2)
     speedup_raw = time_seq_unaligned / time_raw
-    print(f"🏆 Speedup Factor: {speedup_raw:.2f}x")
+    print(f"🏆 Speedup Factor (vs Dict): {speedup_raw:.2f}x")
 
-    # Verify Correctness
-    # Sum of values should match
-    # (Approx check: sum of all elements)
+    # Verification
+    # 1. Size Check
+    expected_size = 75_000
+    if unique_ids.shape[0] == expected_size:
+        print(f"✅ Size Verified: {unique_ids.shape[0]}")
+    else:
+        print(f"❌ ERROR: Size {unique_ids.shape[0]}, expected {expected_size}")
+
+    # 2. Sum Check
     sum_py = np.sum(np.array(final_res_py))
-    sum_jax = jnp.sum(res_raw)
+    sum_jax = jnp.sum(merged_vals)
 
     if np.isclose(sum_py, sum_jax, rtol=1e-3):
-        print("✅ Correctness Verified (Sum Matches)")
+        print("✅ Sum Verified")
     else:
         print(f"❌ ERROR: Sum Mismatch. Py: {sum_py}, JAX: {sum_jax}")
+
 
 if __name__ == "__main__":
     run_composition_benchmark()

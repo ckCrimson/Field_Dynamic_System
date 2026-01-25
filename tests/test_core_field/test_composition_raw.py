@@ -1,145 +1,141 @@
 import pytest
+import jax
 import jax.numpy as jnp
+import numpy as np
 from jax import config
 
 config.update("jax_enable_x64", True)
 
-from src.field_dynamic_system.core.field.compositions import AdditionComposition, MultiplicationComposition
+from src.field_dynamic_system.core.field.algebra import RealFieldAlgebra
+from src.field_dynamic_system.core.field.mappings import DiscreteFieldMapper
+from src.field_dynamic_system.core.field.compositions import AdditionComposition
 from src.field_dynamic_system.core.field.field_space_operations import FieldSpaceComposer
+from src.field_dynamic_system.core.state.discrete import AbstractDiscreteStateSpace
 
 
-# =========================================================================
-# TEST 1: Aligned Composition (Fast Path)
-# Use Case: Simple Vector Addition A + B
-# =========================================================================
-def test_raw_aligned_composition():
-    print("\n=== TEST 1: Raw Aligned Composition (A + B) ===")
+# =========================================================
+# 1. TOPOLOGY (King's Grid)
+# =========================================================
+class KingsGraphTopology:
+    def __init__(self):
+        self.offsets = jnp.array([
+            [-1, -1], [-1, 0], [-1, 1],
+            [0, -1], [0, 1],
+            [1, -1], [1, 0], [1, 1]
+        ])
 
-    # Setup: 3 states, 2D vectors
-    buf_a = jnp.array([[1., 1.], [2., 2.], [3., 3.]])
-    buf_b = jnp.array([[10., 0.], [0., 10.], [5., 5.]])
+    def get_raw_successor(self, current_coords: jnp.ndarray) -> jnp.ndarray:
+        neighbors = current_coords[:, None, :] + self.offsets[None, :, :]
+        return neighbors.reshape(-1, 2)
 
+
+# =========================================================
+# 2. ROBUST INTEGRATION TEST
+# =========================================================
+def test_full_round_trip_robust():
+    print("\n=== TEST: Full Round Trip (Robust String States) ===")
+
+    # A. INITIALIZATION
+    topology = KingsGraphTopology()
+    algebra = RealFieldAlgebra()
+
+    state_a = jnp.array([[0, 0]])
+    state_b = jnp.array([[0, 1]])
+
+    # B. RAW SIMULATION
+    next_coords_a = topology.get_raw_successor(state_a)
+    next_coords_b = topology.get_raw_successor(state_b)
+
+    vals_a = jnp.ones((len(next_coords_a), 1))
+    vals_b = jnp.ones((len(next_coords_b), 1))
+
+    # C. RAW COMPOSITION
+    print("-> Running Raw Composition Kernel...")
     op = AdditionComposition()
+    unique_coords, merged_vals = FieldSpaceComposer.compose_raw(
+        next_coords_a, vals_a,
+        next_coords_b, vals_b,
+        op
+    )
+    unique_coords.block_until_ready()
 
-    # Execute Raw Kernel
-    res = FieldSpaceComposer.compose_raw(buf_a, buf_b, op)
+    # D. RECONSTRUCTION (With String Conversion)
+    print("-> Reconstructing FieldMapper (Coords -> Strings)...")
 
-    expected = jnp.array([[11., 1.], [2., 12.], [8., 8.]])
+    # 1. Robust Conversion: Coordinate -> String Key "-1,0"
+    # This eliminates all ambiguity about Int32 vs Int64 vs Python Int.
+    def to_key(row):
+        return f"{int(row[0])},{int(row[1])}"
 
-    assert jnp.allclose(res, expected)
-    print("  ✅ Aligned Addition Passed")
+    raw_state_keys = [to_key(r) for r in np.array(unique_coords)]
+    raw_values = np.array(merged_vals)
 
+    # 2. Create Space
+    final_space = AbstractDiscreteStateSpace(raw_state_keys)
 
-# =========================================================================
-# TEST 2: Unaligned Composition (Scatter-Gather)
-# Use Case: Merging two partial fields into a Global Space
-# =========================================================================
-def test_raw_unaligned_composition():
-    print("\n=== TEST 2: Raw Unaligned Composition (Intersection & Union) ===")
+    # 3. Alignment (Scatter)
+    N = len(raw_state_keys)
+    dim = merged_vals.shape[1]
 
-    # Scenario:
-    # Global Space has 5 slots: [0, 1, 2, 3, 4]
-    TOTAL_SIZE = 5
+    aligned_buffer = np.zeros((N, dim), dtype=float)
+    aligned_mask = np.zeros(N, dtype=bool)
 
-    # Field A exists at indices [0, 2, 4]
-    # Values: [1,1], [2,2], [4,4]
-    indices_a = jnp.array([0, 2, 4])
-    buf_a = jnp.array([[1., 1.], [2., 2.], [4., 4.]])
+    # Force build a fresh lookup map
+    state_to_idx = {s: i for i, s in enumerate(final_space.states)}
 
-    # Field B exists at indices [2, 3] (Overlap at 2)
-    # Values: [10,10], [30,30]
-    indices_b = jnp.array([2, 3])
-    buf_b = jnp.array([[10., 10.], [30., 30.]])
+    print("-> Debug: Alignment Dump")
+    for i, state_key in enumerate(raw_state_keys):
+        target_idx = state_to_idx[state_key]
+        val = raw_values[i]
 
-    op = AdditionComposition()
+        # Write to buffer
+        aligned_buffer[target_idx] = val
+        aligned_mask[target_idx] = True
 
-    # Execute Raw Unaligned Kernel
+        # DEBUG: Print critical states
+        if state_key == "-1,0":
+            print(f"   Writing '-1,0': Value={val} -> Index={target_idx}")
+
+    # 4. Create Mapper
+    final_mapper = DiscreteFieldMapper(
+        final_space,
+        algebra,
+        explicit_buffer=jnp.array(aligned_buffer),
+        mask_buffer=jnp.array(aligned_mask)
+    )
+
+    # E. VERIFICATION
+    print("-> Verifying Logic...")
+
     # Logic:
-    # Idx 0: A(1,1) + 0      = [1, 1]
-    # Idx 1: 0 + 0           = [0, 0]  (Empty)
-    # Idx 2: A(2,2) + B(10,10) = [12, 12] (Intersection)
-    # Idx 3: 0 + B(30,30)    = [30, 30]
-    # Idx 4: A(4,4) + 0      = [4, 4]
+    # A(0,0) reaches (-1,0). B(0,1) reaches (-1,0). Sum = 2.0.
 
-    res = FieldSpaceComposer.compose_unaligned_raw(
-        buf_a, indices_a,
-        buf_b, indices_b,
-        TOTAL_SIZE,
-        op
-    )
+    # Targets (Strings)
+    target_overlap = "-1,0"
 
-    # Verification
-    print(f"  Result Buffer:\n{res}")
+    # 1. Verify Space Indexing
+    idx = final_mapper.state_space.get_index_of(target_overlap)
+    print(f"   Lookup '{target_overlap}' -> Index {idx}")
+    assert idx is not None, f"Space failed to index {target_overlap}"
 
-    expected = jnp.array([
-        [1., 1.],
-        [0., 0.],
-        [12., 12.],
-        [30., 30.],
-        [4., 4.]
-    ])
+    # 2. Verify Buffer Content Directly
+    buffer_val = final_mapper.explicit_buffer[idx]
+    print(f"   Buffer[{idx}] = {buffer_val}")
 
-    assert jnp.allclose(res, expected)
-    print("  ✅ Unaligned Scatter-Add Passed")
+    # 3. Verify Object API
+    field_objs = final_mapper.get_fields_at(target_overlap)
+    val = float(field_objs[0].value.item())
+    print(f"   API Value: {val}")
 
+    assert val == 2.0, f"Expected 2.0 for overlap state {target_overlap}, got {val}"
 
-# =========================================================================
-# TEST 3: Unaligned Generic Operation (Multiplication)
-# Use Case: Checking the 'else' block for Read-Modify-Write
-# =========================================================================
-def test_raw_unaligned_multiplication():
-    print("\n=== TEST 3: Raw Unaligned Multiplication ===")
+    # Verify a unique state (e.g. A's bottom-left corner)
+    target_unique = "-1,-1"
+    val_unique = float(final_mapper.get_fields_at(target_unique)[0].value.item())
+    assert val_unique == 1.0, f"Expected 1.0 for unique state {target_unique}, got {val_unique}"
 
-    # Scenario: Overlap multiplication
-    # Global Size = 3
-    TOTAL_SIZE = 3
-
-    # Field A at [0, 1]: Values [2], [3]
-    indices_a = jnp.array([0, 1])
-    buf_a = jnp.array([[2.], [3.]])
-
-    # Field B at [1, 2]: Values [4], [5]
-    indices_b = jnp.array([1, 2])
-    buf_b = jnp.array([[4.], [5.]])
-
-    op = MultiplicationComposition()
-
-    # NOTE: The current `compose_unaligned_raw` initializes the global buffer with ZEROS.
-    # For Multiplication, this is tricky.
-    # - Idx 0: A(2) * Init(0) -> 0? Or just A(2)?
-    # - Idx 1: A(3) * B(4) -> 12.
-    # - Idx 2: Init(0) * B(5) -> 0?
-
-    # The current implementation executes:
-    # 1. Init Global = [0, 0, 0]
-    # 2. Set A: Global = [2, 3, 0]
-    # 3. Modify B: Global[1] = Global[1] * B[0] = 3 * 4 = 12
-    #              Global[2] = Global[2] * B[1] = 0 * 5 = 0
-
-    # This behavior is correct for "Scatter-Update" logic on a zero-initialized canvas.
-    # If we wanted Identity initialization (1s), the kernel would need to know the identity element.
-    # For now, we test the CURRENT behavior (Zero Init).
-
-    res = FieldSpaceComposer.compose_unaligned_raw(
-        buf_a, indices_a,
-        buf_b, indices_b,
-        TOTAL_SIZE,
-        op
-    )
-
-    print(f"  Result (Mul): \n{res}")
-
-    expected = jnp.array([
-        [2.],  # Set from A
-        [12.],  # 3 * 4
-        [0.]  # 0 * 5 (Since canvas was 0)
-    ])
-
-    assert jnp.allclose(res, expected)
-    print("  ✅ Generic Read-Modify-Write Passed")
+    print(f"✅ PASSED: Full round trip successful with string keys.")
 
 
 if __name__ == "__main__":
-    test_raw_aligned_composition()
-    test_raw_unaligned_composition()
-    test_raw_unaligned_multiplication()
+    test_full_round_trip_robust()

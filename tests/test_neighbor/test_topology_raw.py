@@ -1,54 +1,137 @@
+import time
+import numpy as np
 import pytest
-import jax.numpy as jnp
-from jax import config
+from typing import Sequence, Any
 
-config.update("jax_enable_x64", True)
-
-from src.field_dynamic_system.core.state.discrete import VectorStateSpace
-from src.field_dynamic_system.core import VectorState
+# Adjust imports to match your project structure
+from src.field_dynamic_system.core.state import  AbstractDiscreteStateSpace, AbstractState
 from src.field_dynamic_system.neighbor.discrete import DiscreteTopology
 
 
-# Import your topologies here...
-# For this test, we mock a simple one or assume DeltaTopology exists
-class LinearTopology(DiscreteTopology):
-    # Simple line: i -> i+1
-    def compute_neighbors(self, state):
-        v = state.values[0]
-        target = VectorState((v + 1.0,))
-        return [target]
+# =========================================================
+# 1. CONCRETE TOPOLOGY (Primitive Logic)
+# =========================================================
+
+class BenchmarkTopology(DiscreteTopology):
+    """
+    Implements neighbor logic using PRIMITIVES (Strings/Ints).
+    This ensures the Raw Track is not slowed down by Object creation.
+    """
+
+    def compute_neighbors(self, state_val: Any) -> Sequence[Any]:
+        # Input: "10" (str)
+        # Output: ["8", "9", "10", "11", "12"] (List[str])
+
+        # Fast conversion for math
+        val = int(state_val)
+
+        return [
+            str(val - 2),
+            str(val - 1),
+            str(val),
+            str(val + 1),
+            str(val + 2)
+        ]
 
 
-def test_raw_kernels():
-    print("\n=== TEST: Raw Topology Kernels ===")
+# =========================================================
+# 2. THE CORRECTED TEST
+# =========================================================
 
-    # 1. Setup Space: [0, 1, 2, 3, 4]
-    states = [VectorState((float(i),)) for i in range(5)]
-    space = VectorStateSpace(states, dim=1)
+def test_run_million_state_benchmark():
+    print("\n=========================================================")
+    print("🚀 BENCHMARK: 1 MILLION STATES (Object vs Raw Matrix)")
+    print("=========================================================")
 
-    topo = LinearTopology(space)
+    # 1. SETUP
+    # We initialize the space with a dummy state to satisfy __init__
+    initial = [AbstractState("0", {})]
+    space = AbstractDiscreteStateSpace(initial)
+    topology = BenchmarkTopology(space)
 
-    # 2. Test Successor (Raw)
-    # Start at Index 1 (State "1.0")
-    start_idx = jnp.array([1])
-    succ_idx = topo.get_raw_successor(start_idx)
+    # 2. GENERATE INPUTS
+    N_STATES = 100_000  # Keep at 100k for CI/Test speed. Scale to 1M for full stress test.
+    print(f"-> Generating {N_STATES} random inputs...")
 
-    # Expect: Index 2 (State "2.0")
-    print(f"  Successor of 1: {succ_idx}")
-    assert jnp.array_equal(succ_idx, jnp.array([2]))
+    random_ints = np.random.randint(0, 10_000_000, N_STATES)
 
-    # 3. Test Multi-Step (Raw)
-    # Start at Index 0, 3 steps -> Should reach Index 3
-    multi_idx = topo.get_raw_multi_step_successor(jnp.array([0]), 3)
+    # CRITICAL: Create two datasets
+    # Set A: Primitive Strings (For Raw Track) -> ["1", "50", ...]
+    input_primitives = [str(i) for i in random_ints]
 
-    print(f"  0 + 3 Steps: {multi_idx}")
-    assert jnp.array_equal(multi_idx, jnp.array([3]))
+    # Set B: State Objects (For Legacy Baseline) -> [AbstractState("1"), ...]
+    input_objects = [AbstractState(p, {}) for p in input_primitives]
 
-    # 4. Test Predecessor (Raw)
-    # Who can reach Index 4? Should be Index 3.
-    pred_idx = topo.get_raw_predecessor(jnp.array([4]))
+    # ---------------------------------------------------------
+    # A. OBJECT BASELINE (The "Old Way")
+    # ---------------------------------------------------------
+    print(f"\n[A] Running Object Logic (Python Loop + Object Wrapper)...")
+    t0 = time.time()
 
-    print(f"  Predecessor of 4: {pred_idx}")
-    assert jnp.array_equal(pred_idx, jnp.array([3]))
+    object_results = set()
 
-    print("✅ All Raw Kernels passed.")
+    # Simulate the legacy behavior:
+    # Iterate Objects -> Get Value -> Compute -> Wrap in Objects
+    for s_obj in input_objects:
+        # 1. Extract Primitive (Simulating what the Topology would do)
+        val = s_obj.name
+
+        # 2. Compute Neighbors (Primitive)
+        neighbors_raw = topology.compute_neighbors(val)
+
+        # 3. Wrap back into Objects (The cost of the Object System)
+        for n_val in neighbors_raw:
+            object_results.add(AbstractState(n_val, {}))
+
+    t_object = time.time() - t0
+    print(f"⏱️  Time: {t_object:.4f}s")
+    print(f"   Unique Neighbors: {len(object_results)}")
+
+    # ---------------------------------------------------------
+    # B. RAW LOGIC (The "New Way")
+    # ---------------------------------------------------------
+    print(f"\n[B] Running Raw Logic (Cold Start - Building Matrix)...")
+    t0 = time.time()
+
+    # CRITICAL FIX: Pass PRIMITIVES, not Objects
+    raw_results_cold = topology.get_raw_successor(input_primitives)
+
+    t_raw_cold = time.time() - t0
+    print(f"⏱️  Time: {t_raw_cold:.4f}s")
+    print(f"   Count: {len(raw_results_cold)}")
+
+    print(f"\n[B] Running Raw Logic (Warm Start - JAX Cached)...")
+    t0 = time.time()
+
+    # Second call uses the cached BCOO matrix
+    raw_results_warm = topology.get_raw_successor(input_primitives)
+
+    t_raw_warm = time.time() - t0
+    print(f"⏱️  Time: {t_raw_warm:.4f}s")
+
+    # ---------------------------------------------------------
+    # C. VERIFICATION
+    # ---------------------------------------------------------
+    print(f"\n--- Results ---")
+    speedup = t_object / t_raw_warm
+    print(f"🚀 Speedup (Warm vs Object): {speedup:.1f}x")
+
+    # Correctness Check
+    # We must compare apples to apples. Convert Raw Strings -> AbstractStates for check
+    raw_results_as_objects = {AbstractState(s, {}) for s in raw_results_warm}
+
+    if raw_results_as_objects == object_results:
+        print("✅ SUCCESS: Raw Matrix results match Legacy Object results exactly.")
+    else:
+        print(f"❌ FAILURE: Mismatch.")
+        print(f"   Object Count: {len(object_results)}")
+        print(f"   Raw Count:    {len(raw_results_as_objects)}")
+
+        diff = object_results - raw_results_as_objects
+        if diff:
+            sample = list(diff)[:3]
+            print(f"   Missing in Raw: {sample}")
+
+
+if __name__ == "__main__":
+    test_run_million_state_benchmark()

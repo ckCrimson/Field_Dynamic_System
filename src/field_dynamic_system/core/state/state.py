@@ -1,5 +1,5 @@
-from dataclasses import dataclass
-from typing import  Any
+from dataclasses import dataclass, field
+from typing import Any, Dict
 from .interfaces import State
 
 
@@ -39,8 +39,8 @@ class AbstractState(State):
     """
     Generic container for discrete user objects.
     """
-    name: str
-    properties: dict[str, Any]  # e.g. {'flammable': True}
+    name: Any
+    properties: Dict[Any, Any] = field(default_factory=dict) # e.g. {'flammable': True}
 
     def __hash__(self):
         return hash(self.name)

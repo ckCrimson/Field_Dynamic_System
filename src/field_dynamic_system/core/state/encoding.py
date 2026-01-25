@@ -1,6 +1,8 @@
 from dataclasses import dataclass
 
 import jax.numpy as jnp
+import numpy as np
+
 from .interfaces import StateEncoder, State
 from .state import VectorState, AbstractState
 from typing import List, Union, Sequence, Tuple, Any
@@ -155,3 +157,26 @@ class IdentityEncoder(StateEncoder):
             # Input is (D,) or (1, D)
             flat = encoded_data.reshape(-1)
             return tuple(flat.tolist())
+
+
+class RegistryEncoder(StateEncoder):
+    def __init__(self, states: List[AbstractState]):
+        self.states = states
+        # Map State -> Index
+        self.lookup = {s: i for i, s in enumerate(states)}
+
+    @property
+    def shape(self) -> tuple[int, ...]:
+        return (1,)
+
+    def encode(self, data: Union[State, Sequence[State]]) -> jnp.ndarray:
+        if isinstance(data, list) or isinstance(data, tuple):
+            return jnp.array([self.lookup[s] for s in data], dtype=jnp.int32)
+        return jnp.array([self.lookup[data]], dtype=jnp.int32)
+
+    def decode(self, encoded_data: jnp.ndarray) -> Union[State, List[State]]:
+        if encoded_data.ndim == 0:
+            return self.states[int(encoded_data)]
+        # Ensure we flatten to list of ints
+        indices = np.array(encoded_data).flatten().tolist()
+        return [self.states[i] for i in indices]
