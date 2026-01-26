@@ -442,8 +442,8 @@ class FieldSpaceComposer:
     @staticmethod
     def compose(mapper_a: FieldMapper,
                 mapper_b: FieldMapper,
+                op_name: FieldComposition,
                 output_algebra: IFieldAlgebra,
-                op_name: str = "add",
                 override_bg_func: Optional[Callable] = None) -> FieldMapper:
         """
         Main Entry Point. Dispatches based on mapper types.
@@ -567,112 +567,160 @@ class FieldSpaceComposer:
 
         return unique_ids, merged_vals
 
-    # =========================================================
-    # DISCRETE + DISCRETE
-    # =========================================================
+        # =========================================================
+        # DISCRETE + DISCRETE
+        # =========================================================
+
     @staticmethod
     def _compose_discrete_discrete(a: DiscreteFieldMapper,
                                    b: DiscreteFieldMapper,
                                    out_alg: IFieldAlgebra,
-                                   op_name: str,
+                                   op: FieldComposition,
                                    final_bg=None):
-
-        # 1. FAST PATH: Identity Check
-        # If they share the exact same StateSpace instance, we skip alignment logic.
+        # 1. FAST PATH (Identity)
         if a.state_space is b.state_space:
-            new_buffer = FieldSpaceComposer.compose_aligned_raw(
-                a.explicit_buffer, b.explicit_buffer, out_alg, op_name
-            )
+            new_buffer = op.compose(a.explicit_buffer, b.explicit_buffer)
             new_mask = a.mask_buffer | b.mask_buffer
-            # Background composition
             new_bg = final_bg if final_bg else None
-
             return DiscreteFieldMapper(a.state_space, out_alg,
                                        explicit_buffer=new_buffer,
                                        mask_buffer=new_mask,
                                        bg_func=new_bg)
 
-        # 2. SLOW PATH: Alignment Required
-        # This uses Python loops. Only used during Setup/Init.
+        # 2. ROBUST VECTORIZED PATH
+        # Create Union of States
+        states_a = list(a.state_space.states)
+        states_b = list(b.state_space.states)
+        set_a = set(states_a)
+        set_b = set(states_b)
 
-        # A. Create Union Space
-        states_a = a.state_space.states
-        states_b = b.state_space.states
-        union_list = list(set(states_a).union(set(states_b)))
-
-        # Create new dummy space
-        # (Assuming StateSpace can handle list init, or use a.state_space.create_subset)
+        # Sort for determinism
         try:
+            union_list = sorted(list(set_a.union(set_b)))
+        except TypeError:
+            union_list = list(set_a.union(set_b))
+
+        N = len(union_list)
+
+        # Map: New State -> New Index
+        union_map = {s: i for i, s in enumerate(union_list)}
+
+        # Initialize Gather Indices
+        gather_indices_a = np.full(N, -1, dtype=np.int32)
+        gather_indices_b = np.full(N, -1, dtype=np.int32)
+
+        # Source Lookup Helpers
+        has_map_a = hasattr(a.state_space, 'state_to_index')
+        has_map_b = hasattr(b.state_space, 'state_to_index')
+
+        # Fill Map A
+        for s_a in states_a:
+            if s_a in union_map:
+                new_idx = union_map[s_a]
+                old_idx = a.state_space.state_to_index[s_a] if has_map_a else states_a.index(s_a)
+                gather_indices_a[new_idx] = old_idx
+
+        # Fill Map B
+        for s_b in states_b:
+            if s_b in union_map:
+                new_idx = union_map[s_b]
+                old_idx = b.state_space.state_to_index[s_b] if has_map_b else states_b.index(s_b)
+                gather_indices_b[new_idx] = old_idx
+
+        # JAX Indices
+        jax_idx_a = jnp.array(gather_indices_a)
+        jax_idx_b = jnp.array(gather_indices_b)
+
+        # Gather & Mask
+        mask_a = (jax_idx_a >= 0)[:, None]
+        mask_b = (jax_idx_b >= 0)[:, None]
+
+        safe_idx_a = jnp.maximum(jax_idx_a, 0)
+        safe_idx_b = jnp.maximum(jax_idx_b, 0)
+
+        raw_vals_a = a.explicit_buffer[safe_idx_a]
+        raw_vals_b = b.explicit_buffer[safe_idx_b]
+
+        # --- FIX 1: Correct Background Evaluation ---
+        # We call the function directly (if it exists) instead of non-existent get_raw_batch
+
+        if a.background_func:
+            bg_vals_a = a.background_func(union_list)
+        else:
+            bg_vals_a = out_alg.get_zero((N,))
+
+        if b.background_func:
+            bg_vals_b = b.background_func(union_list)  # Corrected call
+        else:
+            bg_vals_b = out_alg.get_zero((N,))
+
+        # Select Values
+        final_vals_a = jnp.where(mask_a, raw_vals_a, bg_vals_a)
+        final_vals_b = jnp.where(mask_b, raw_vals_b, bg_vals_b)
+
+        # Math
+        final_buffer = op.compose(final_vals_a, final_vals_b)
+
+        # Create Result Space
+        if hasattr(a.state_space, "spawn_new_space"):
+            new_space = a.state_space.spawn_new_space(union_list)
+        elif hasattr(a.state_space, "create_subset"):
             new_space = a.state_space.create_subset(union_list)
-        except:
-            # Fallback for Abstract spaces
+        else:
             from src.field_dynamic_system.core.state.discrete import AbstractDiscreteStateSpace
             new_space = AbstractDiscreteStateSpace(union_list)
 
-        # B. Map Indices
-        idx_map_a = {s: i for i, s in enumerate(states_a)}
-        idx_map_b = {s: i for i, s in enumerate(states_b)}
-
-        # C. Build New Buffer
-        N = len(union_list)
-        dim = a.explicit_buffer.shape[1]
-        final_buffer = jnp.zeros((N, dim), dtype=a.explicit_buffer.dtype)
-
-        # This loop is unavoidable for symbolic alignment
-        for i, s in enumerate(union_list):
-            val_a = out_alg.get_zero((1, dim))
-            val_b = out_alg.get_zero((1, dim))
-
-            if s in idx_map_a:
-                val_a = a.explicit_buffer[idx_map_a[s]]
-            elif a.background_func:
-                # Implicit value
-                val_a = a.get_fields_at(s)[0].value
-
-            if s in idx_map_b:
-                val_b = b.explicit_buffer[idx_map_b[s]]
-            elif b.background_func:
-                val_b = b.get_fields_at(s)[0].value
-
-            if op_name == "add":
-                res = out_alg.add(val_a, val_b)
-            else:
-                res = out_alg.mul(val_a, val_b)
-
-            final_buffer = final_buffer.at[i].set(res)
-
         return DiscreteFieldMapper(new_space, out_alg, explicit_buffer=final_buffer)
 
-    # =========================================================
-    # CONTINUOUS (Simplified)
-    # =========================================================
+
     @staticmethod
-    def _compose_continuous_continuous(a, b, out_alg, op_name, final_bg=None):
+    def _compose_continuous_continuous(a, b, out_alg, op: FieldComposition, final_bg=None):
+        """
+        Composes two continuous fields by creating a new background function
+        that evaluates both and applies the op.
+        """
         if final_bg:
             new_bg = final_bg
         else:
             def composed_bg(coords):
                 v1 = a.get_raw_batch(coords)
                 v2 = b.get_raw_batch(coords)
-                if op_name == "add": return out_alg.add(v1, v2)
-                return out_alg.mul(v1, v2)
+                return op.compose(v1, v2)
 
             new_bg = composed_bg
 
         return ContinuousFieldMapper(a.state_space, out_alg, bg_func=new_bg)
 
+    # =========================================================
+    # 3. HYBRID (Discrete + Continuous)
+    # =========================================================
     @staticmethod
-    def _compose_hybrid(a, b, out_alg, op_name, final_bg=None):
-        # Hybrid usually results in Continuous
+    def _compose_hybrid(a, b, out_alg, op: FieldComposition, final_bg=None):
         cont = a if isinstance(a, ContinuousFieldMapper) else b
         disc = b if isinstance(a, ContinuousFieldMapper) else a
 
         def hybrid_bg(coords):
-            # Evaluate continuous
+            # 1. Continuous Value
             v_cont = cont.get_raw_batch(coords)
-            # Discrete is treated as background 0 unless we overlap?
-            # Usually hybrid composition treats discrete as 'points' in continuous space.
-            # For simplicity, we just return continuous + 0
-            return v_cont
+
+            # 2. Discrete Lookup
+            try:
+                # Handle batch or single
+                if isinstance(coords, (list, tuple, np.ndarray)) and len(coords) > 1:
+                    vals = []
+                    for c in coords:
+                        f_list = disc.get_fields_at(c)
+                        vals.append(f_list[0].value if f_list else out_alg.get_zero(()))
+                    v_disc = jnp.stack(vals)
+                else:
+                    c = coords[0] if isinstance(coords, (list, tuple)) else coords
+                    f_list = disc.get_fields_at(c)
+                    v_disc = f_list[0].value if f_list else out_alg.get_zero(v_cont.shape)
+
+            except Exception:
+                v_disc = out_alg.get_zero(v_cont.shape)
+
+            # 3. Compose
+            return op.compose(v_cont, v_disc)
 
         return ContinuousFieldMapper(cont.state_space, out_alg, bg_func=hybrid_bg)

@@ -43,7 +43,7 @@ def test_discrete_unaligned_overlap():
 
     f3 = FieldSpaceComposer.compose(
         f1, f2,
-        composition_op=AdditionComposition(),
+        op_name=AdditionComposition(),
         output_algebra=alg
     )
 
