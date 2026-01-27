@@ -62,7 +62,7 @@ class DiscreteTopology(Topology, ABC):
 
         if N == 0: return sparse.BCOO.fromdense(jnp.zeros((0, 0), dtype=jnp.float32))
 
-        # Vectorized Neighbor Search (Standard Ferrari Engine)
+        # Vectorized Neighbor Search
         bounds_max = int(np.max(raw_coords)) + 2
         strides = np.array([bounds_max ** i for i in range(D)], dtype=np.int64)
         encoded_states = raw_coords.dot(strides)
@@ -89,14 +89,13 @@ class DiscreteTopology(Topology, ABC):
         indices = jnp.column_stack((jnp.array(all_tgt), jnp.array(all_src)))
         values = jnp.ones(len(all_src), dtype=jnp.float32)
 
-        # Injected Weights Check (for Weighted Topology subclasses)
+        # Injected Weights Check
         if hasattr(self, 'weight'):
             values = jnp.full((len(all_src),), self.weight, dtype=jnp.float32)
 
         return sparse.BCOO((values, indices), shape=(N, N))
 
     def _build_standard_matrix(self) -> sparse.BCOO:
-        # ... (Same as before - Standard Python Loop)
         states = list(self.discrete_space.states)
         N = len(states)
         state_map = {s: i for i, s in enumerate(states)}
@@ -118,11 +117,8 @@ class DiscreteTopology(Topology, ABC):
         values = jnp.ones(len(sources), dtype=jnp.float32)
         return sparse.BCOO((values, indices), shape=(N, N))
 
-    # --- RAW ENGINE (Updated to handle Fast Path) ---
     def get_raw_successor(self, state_data_batch: Sequence[Any]) -> Sequence[Any]:
-        # If fast path active, we can't use the slow dict lookup yet
-        if self._fast_path_active:
-            return []  # TODO: Implement vectorized successor lookup if needed
+        if self._fast_path_active: return []
         ids = self._raw_register_batch(state_data_batch)
         self._raw_ensure_expanded(ids)
         next_indices = set()
@@ -132,8 +128,15 @@ class DiscreteTopology(Topology, ABC):
                 if src_id < len(rows): next_indices.update(rows[src_id])
         return [self._id_to_raw[i] for i in next_indices]
 
+    # --- RESTORED MISSING METHOD ---
+    def get_raw_multi_step_successor(self, initial_states: Sequence[Any], steps: int) -> Sequence[Any]:
+        current_batch = initial_states
+        for _ in range(steps):
+            current_batch = self.get_raw_successor(current_batch)
+            if not current_batch: break
+        return current_batch
+
     def expand_frontier(self, initial_states: Sequence[Any], depth: int):
-        # Default implementation (overridden by VectorGridTopology)
         ids = self._raw_register_batch(initial_states)
         for _ in range(depth):
             self._raw_ensure_expanded(ids)
@@ -146,12 +149,9 @@ class DiscreteTopology(Topology, ABC):
             ids = list(set(next_ids))
 
     def export_discovery(self) -> Tuple[List[Any], Optional[sparse.BCOO]]:
-        # Sync Fast Coords to JAX
         if self._fast_path_active and self._fast_coords is not None:
-            # Force build adjacency from fast coords
             self._adjacency_matrix = self._build_fast_vector_matrix()
             return self._fast_coords.tolist(), self._adjacency_matrix
-
         self._raw_sync_to_device()
         return self._id_to_raw, self._raw_jax_matrix
 
@@ -167,7 +167,6 @@ class DiscreteTopology(Topology, ABC):
             self._raw_dirty = False
 
     def _raw_register_batch(self, data_batch):
-        # Slow Path Register
         ids = []
         if hasattr(data_batch, 'tolist'): data_batch = data_batch.tolist()
         for data in data_batch:
@@ -181,10 +180,33 @@ class DiscreteTopology(Topology, ABC):
 
     def _raw_ensure_expanded(self, ids):
         if self._fast_path_active: return
-        # ... (Slow Path Logic Omitted for Brevity, same as before)
-        # Assuming you have the previous version's logic here if needed for GraphTopology
+        unknown = [i for i in ids if i not in self._raw_explored]
+        if not unknown: return
+        new_rows, new_cols = [], []
+        if self._raw_cpu_matrix is None:
+            self._raw_cpu_matrix = sp.lil_matrix((0, 0), dtype=np.float32)
+        current_max_id = self._raw_cpu_matrix.shape[0] - 1
+        for src_id in unknown:
+            data = self._id_to_raw[src_id]
+            neighbors = self.compute_neighbors(data)
+            if not neighbors:
+                self._raw_explored.add(src_id);
+                continue
+            dst_ids = self._raw_register_batch(neighbors)
+            count = len(dst_ids)
+            new_rows.extend([src_id] * count)
+            new_cols.extend(dst_ids)
+            local_max = max(dst_ids) if dst_ids else src_id
+            local_max = max(local_max, src_id)
+            if local_max > current_max_id: current_max_id = local_max
+            self._raw_explored.add(src_id)
+        if not new_rows: return
+        if current_max_id >= self._raw_cpu_matrix.shape[0]:
+            new_size = max(current_max_id + 1, int(self._raw_cpu_matrix.shape[0] * 1.5))
+            self._raw_cpu_matrix.resize((new_size, new_size))
+        self._raw_cpu_matrix[new_rows, new_cols] = 1.0
+        self._raw_dirty = True
 
-    # ... (Interface methods same as before)
     def successor(self, state):
         return self.discrete_space.create_subset(list(self.compute_neighbors(state)))
 
@@ -208,7 +230,6 @@ class DiscreteTopology(Topology, ABC):
 class GraphTopology(DiscreteTopology):
     def __init__(self, state_space, adjacency_matrix=None, edges=None):
         super().__init__(state_space)
-        # ... (Graph Topology Init logic same as before)
         if isinstance(adjacency_matrix, list) and edges is None: edges = adjacency_matrix; adjacency_matrix = None
         N = state_space.num_states
         if edges is not None:
@@ -259,51 +280,33 @@ class VectorGridTopology(DiscreteTopology):
     def _build_adjacency_matrix(self) -> sparse.BCOO:
         return self._build_fast_vector_matrix()
 
-    # --- ZERO-COPY DISCOVERY (The Speed Fix) ---
     def expand_frontier(self, initial_states: Sequence[Any], depth: int):
         self._fast_path_active = True
-
-        # 1. Input: Keep as Numpy Array (No lists!)
         initial_arr = np.array(initial_states, dtype=np.int64)
         if initial_arr.ndim == 1: initial_arr = initial_arr.reshape(1, -1)
         D = initial_arr.shape[1]
-
-        # View as binary blob for fast unique/diff
         dtype_view = np.dtype((np.void, D * 8))
         current_frontier = np.ascontiguousarray(initial_arr).view(dtype_view).ravel()
         visited_view = current_frontier.copy()
-
         self._raw_cpu_matrix = None
 
-        # 2. Vector Loop
         for _ in range(depth):
             if current_frontier.size == 0: break
-
-            # Broadcast Add
             current_coords = current_frontier.view(np.int64).reshape(-1, D)
             candidates = current_coords[:, None, :] + self.deltas[None, :, :]
             candidates_flat = candidates.reshape(-1, D)
-
-            # Set Ops
             candidates_view = np.ascontiguousarray(candidates_flat).view(dtype_view).ravel()
             unique_candidates = np.unique(candidates_view)
             new_frontier = np.setdiff1d(unique_candidates, visited_view, assume_unique=True)
-
             if new_frontier.size == 0: break
-
-            # Merge
             visited_view = np.concatenate((visited_view, new_frontier))
             visited_view.sort()
             current_frontier = new_frontier
 
-        # 3. SAVE AS NUMPY (NO CONVERSION TO LIST/TUPLES)
-        # We keep the raw coordinates in a cache.
-        # We do NOT populate _id_to_raw or _raw_to_id here because that forces Python loop.
         self._fast_coords = visited_view.view(np.int64).reshape(-1, D)
 
 
 class DeltaTopology(DiscreteTopology):
-    # ... (Same as previous DeltaTopology)
     def __init__(self, state_space, deltas):
         super().__init__(state_space)
         clean_deltas = []
@@ -352,3 +355,10 @@ class MetricDiscreteTopology(DiscreteTopology):
             c_val = np.array(c.values) if hasattr(c, 'values') else np.array(c)
             if np.linalg.norm(q - c_val) <= self.max_dist: neighbors.append(c)
         return neighbors
+
+
+# --- ADDED THIS CLASS BACK ---
+class WeightedVectorGridTopology(VectorGridTopology):
+    def __init__(self, state_space, deltas, weight=1.0):
+        super().__init__(state_space, deltas)
+        self.weight = weight
