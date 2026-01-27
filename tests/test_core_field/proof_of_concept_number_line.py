@@ -8,7 +8,6 @@ from src.field_dynamic_system.core.state import AbstractState, AbstractDiscreteS
 from src.field_dynamic_system.neighbor.discrete import DiscreteTopology
 from src.field_dynamic_system.core.field.mappings import DiscreteFieldMapper
 from src.field_dynamic_system.core.field.algebra import IFieldAlgebra
-# NEW IMPORT
 from src.field_dynamic_system.core.field.field_space_operations import FieldSpaceComposer
 
 
@@ -51,6 +50,7 @@ def test_single_step_relocation_with_composition():
     print("=========================================================")
 
     # --- A. INITIALIZATION ---
+    # We init with a dummy, but it might get pushed to end of ID list if new states are added
     space = AbstractDiscreteStateSpace([AbstractState("dummy", {})])
     topology = WalkerTopology(space)
     algebra = RealFieldAlgebra()
@@ -70,20 +70,16 @@ def test_single_step_relocation_with_composition():
     num_states = matrix.shape[0]
     mapper.sync_size(num_states)
 
-    # --- D. COMPOSE FIELDS (The New Part) ---
-    # Goal: Combine Field A (Impulse at 0) and Field B (Impulse at 1)
-
+    # --- D. COMPOSE FIELDS ---
     # 1. Get IDs
     id_0 = topology._raw_to_id[(0,)]
     id_1 = topology._raw_to_id[(1,)]
     print(f"-> ID Mapping: (0,)={id_0}, (1,)={id_1}")
 
-    # 2. Define Sparse Inputs (Mocking two independent sources)
-    # Source A: value 1.0 at index id_0
+    # 2. Define Sparse Inputs
     ids_a = jnp.array([[id_0]])
     vals_a = jnp.array([[1.0]])
 
-    # Source B: value 1.0 at index id_1
     ids_b = jnp.array([[id_1]])
     vals_b = jnp.array([[1.0]])
 
@@ -95,23 +91,14 @@ def test_single_step_relocation_with_composition():
     print("-> Composing Sparse Fields via FieldSpaceComposer...")
 
     # 3. Call The Raw Composer
-    # This merges the two sparse lists into one unique list
     comp_ids, comp_vals = FieldSpaceComposer.compose_raw(
         ids_a, vals_a,
         ids_b, vals_b,
-         AdditionCompositions()
+        AdditionCompositions()
     )
 
-    print(f"   Composed IDs: {comp_ids.flatten()}")
-    print(f"   Composed Vals: {comp_vals.flatten()}")
-
-    # 4. Scatter into Dense Vector (Physics Prep)
-    # We start with empty universe and fill in the composed active sites
+    # 4. Scatter into Dense Vector
     current_field = jnp.zeros((num_states, 1), dtype=jnp.float32)
-
-    # JAX syntax: at[indices].set(values)
-    # Note: comp_ids might need flattening depending on shape, usually (N, 1) or (N,)
-    # We ensure indices are integers for indexing
     current_field = current_field.at[comp_ids.flatten().astype(int)].set(comp_vals)
 
     mapper.apply_vector(current_field)
@@ -119,7 +106,12 @@ def test_single_step_relocation_with_composition():
 
     # --- E. SOLVE (Physics Step) ---
     print("-> Running Physics Step...")
-    next_field = matrix.T @ current_field
+
+    # FIX: The Topology matrix is constructed as Target x Source (M_ij = 1 if j -> i).
+    # So we simply multiply Matrix @ Vector.
+    # We DO NOT transpose, because Transpose would mean summing REVERSE edges.
+    next_field = matrix @ current_field
+
     mapper.apply_vector(next_field)
 
     # --- F. VERIFICATION ---
