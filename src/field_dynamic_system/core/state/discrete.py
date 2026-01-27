@@ -7,7 +7,7 @@ import jax.numpy as jnp
 # Ensure these imports match your project structure
 from .interfaces import IDiscreteStateSpace, StateEncoder, StateSpace, IStateOperation, State
 from .encoding import BitMaskingEncoding, VectorEncoding
-from .state import VectorState  # Assuming VectorState is defined in vector.py or similar
+from .state import VectorState
 
 
 @dataclass
@@ -26,6 +26,8 @@ class AbstractDiscreteStateSpace(IDiscreteStateSpace):
                  encoder: Optional[StateEncoder] = None):
 
         # 1. Internal Storage
+        # Convert to list and sort for deterministic index assignment
+        # Using str(x) is a safe generic sort key
         initial_list = sorted(list(set(states)), key=lambda x: str(x))
 
         self._idx_to_state = []
@@ -34,13 +36,11 @@ class AbstractDiscreteStateSpace(IDiscreteStateSpace):
         # 2. Encoder
         self._encoder = encoder if encoder else BitMaskingEncoding(initial_list)
 
-        # 3. Populate
+        # 3. Populate (Uses register_states to ensure _on_state_added is called)
         self.register_states(initial_list)
 
-    # --- THE FIX: Dynamic Property ---
     @property
     def num_states(self) -> int:
-        """Always returns the current true count of registered states."""
         return len(self._idx_to_state)
 
     @property
@@ -57,10 +57,13 @@ class AbstractDiscreteStateSpace(IDiscreteStateSpace):
         indices = []
 
         for s in states_batch:
+            # O(1) Lookup - This prevents the N^2 bottleneck
             if s not in self._state_to_idx:
                 new_idx = len(self._idx_to_state)
                 self._state_to_idx[s] = new_idx
                 self._idx_to_state.append(s)
+
+                # Hook for subclasses (Matrix update / Index update)
                 self._on_state_added(s)
 
             indices.append(self._state_to_idx[s])
@@ -71,11 +74,10 @@ class AbstractDiscreteStateSpace(IDiscreteStateSpace):
         return int(self.register_states([state])[0])
 
     def _on_state_added(self, state):
+        """Override in subclasses to handle new state registration."""
         pass
 
     # --- Lookup ---
-
-
 
     def get_index_of(self, state_obj: Any) -> int:
         return self._state_to_idx.get(state_obj, -1)
@@ -108,6 +110,7 @@ class AbstractDiscreteStateSpace(IDiscreteStateSpace):
         obj._idx_to_state = []
         obj._state_to_idx = {}
         obj._encoder = encoder
+        # Re-register to rebuild lookups
         obj.register_states(states)
         return obj
 
@@ -124,17 +127,40 @@ class VectorStateSpace(AbstractDiscreteStateSpace):
         # super init calls register_states -> _on_state_added
         super().__init__(vectors, encoder=VectorEncoding(dim))
 
+    # def _on_state_added(self, state: VectorState):
+    #     """Called automatically by register_states when a new vector comes in."""
+    #     new_vec = jnp.array(state.values, dtype=jnp.float32).reshape(1, self.dim)
+    #     # Concatenate to keep matrix in sync with _idx_to_state
+    #     self._matrix = jnp.concatenate([self._matrix, new_vec], axis=0)
+
     def _on_state_added(self, state: VectorState):
-        """Called automatically by register_states when a new vector comes in."""
-        new_vec = jnp.array(state.values, dtype=jnp.float32).reshape(1, self.dim)
-        # Concatenate to keep matrix in sync with _idx_to_state
-        self._matrix = jnp.concatenate([self._matrix, new_vec], axis=0)
+        """
+        Only append if the matrix size is actually smaller than the state count.
+        If we pre-allocated, this becomes a no-op or a simple check.
+        """
+        if len(self._idx_to_state) > self._matrix.shape[0]:
+            new_vec = jnp.array(state.values, dtype=jnp.float32).reshape(1, self.dim)
+            self._matrix = jnp.concatenate([self._matrix, new_vec], axis=0)
 
     def create_subset(self, states: List[VectorState]) -> 'VectorStateSpace':
         return VectorStateSpace(states, dim=self.dim)
 
     def get_matrix(self) -> jnp.ndarray:
         return self._matrix
+
+    # --- Missing Method Implementation (Linear Fallback) ---
+    def filter_by_index(self, axis_idx: int, value: float, atol: float = 1e-6) -> 'VectorStateSpace':
+        """
+        Linear search fallback O(N).
+        Used if IndexedVectorStateSpace lookup fails or for unindexed axes.
+        """
+        matches = []
+        for state in self._idx_to_state:
+            # Check axis bounds
+            if axis_idx < len(state.values):
+                if abs(state.values[axis_idx] - value) <= atol:
+                    matches.append(state)
+        return self.create_subset(matches)
 
     # --- Pytree ---
     def _tree_flatten(self):
@@ -152,6 +178,8 @@ class VectorStateSpace(AbstractDiscreteStateSpace):
         obj._encoder = encoder
         obj._matrix = matrix
         return obj
+
+
 class IndexedVectorStateSpace(VectorStateSpace):
     """
     An optimized VectorSpace that pre-builds lookup tables (Hash Maps).
@@ -159,29 +187,39 @@ class IndexedVectorStateSpace(VectorStateSpace):
     """
 
     def __init__(self, vectors: Sequence[VectorState], dim: int, indexed_axes: tuple = (0,), precision: int = 6):
-        super().__init__(vectors, dim=dim)
-
         self.indexed_axes = indexed_axes
         self.precision = precision
 
-        # Build Index (Value Tuple -> Int Index) for get_index_of
-        self._value_to_index = {v.values: i for i, v in enumerate(self._sorted_states)}
+        # Initialize containers BEFORE calling super().__init__
+        # because super() calls register_states -> _on_state_added immediately
+        self._value_to_index = {}
+        self._axis_index_map = {axis: defaultdict(list) for axis in self.indexed_axes}
 
-        # Build Axis Index (Axis Value -> List of Int Indices)
-        self._axis_index_map = self._build_axis_index()
+        super().__init__(vectors, dim=dim)
 
-    def _build_axis_index(self) -> dict:
-        lookup = {axis: defaultdict(list) for axis in self.indexed_axes}
-        for i, state in enumerate(self._sorted_states):
-            vals = state.values
-            for axis in self.indexed_axes:
-                if axis < len(vals):
-                    key = round(vals[axis], self.precision)
-                    lookup[axis][key].append(i)
-        return lookup
+    def _on_state_added(self, state: VectorState):
+        """
+        Override to update indexes dynamically.
+        CRITICAL: Must call super() to update the JAX Matrix.
+        """
+        # 1. Update Matrix (Parent logic)
+        super()._on_state_added(state)
+
+        # 2. Get the new index (it was just added to the end of the list)
+        idx = len(self._idx_to_state) - 1
+
+        # 3. Update Value Lookup (Tuple -> Index)
+        self._value_to_index[state.values] = idx
+
+        # 4. Update Axis Indexes
+        vals = state.values
+        for axis in self.indexed_axes:
+            if axis < len(vals):
+                key = round(vals[axis], self.precision)
+                self._axis_index_map[axis][key].append(idx)
 
     def search_by_index(self, axis_idx: int, value: float) -> 'VectorStateSpace':
-        """O(1) Search."""
+        """O(1) Search using hash maps."""
         if axis_idx in self._axis_index_map:
             key = round(value, self.precision)
             target_indices = self._axis_index_map[axis_idx].get(key, [])
@@ -189,10 +227,11 @@ class IndexedVectorStateSpace(VectorStateSpace):
             if not target_indices:
                 return self.create_subset([])
 
-            subset_states = [self._sorted_states[i] for i in target_indices]
+            # FIX: Use self._idx_to_state, not self._sorted_states
+            subset_states = [self._idx_to_state[i] for i in target_indices]
             return self.create_subset(subset_states)
 
-        # Fallback
+        # Fallback to linear search in parent
         return super().filter_by_index(axis_idx, value, atol=10 ** -self.precision)
 
     def select_index(self, axes: List[int], values: List[float]) -> 'VectorStateSpace':
@@ -203,7 +242,7 @@ class IndexedVectorStateSpace(VectorStateSpace):
         candidate_indices = None
         manual_check = []
 
-        # 1. Intersection of Indices
+        # 1. Intersection of Indices (Fast)
         for axis, val in zip(axes, values):
             if axis in self._axis_index_map:
                 key = round(val, self.precision)
@@ -220,12 +259,14 @@ class IndexedVectorStateSpace(VectorStateSpace):
                 manual_check.append((axis, val))
 
         if candidate_indices is None:
+            # If no axes were indexed, scan everything
             candidate_indices = range(self.num_states)
 
-        # 2. Final Verification
+        # 2. Final Verification (for unindexed axes or precision collision)
         final_states = []
         for idx in candidate_indices:
-            state = self._sorted_states[idx]
+            # FIX: Use self._idx_to_state
+            state = self._idx_to_state[idx]
             match = True
             for axis, val in manual_check:
                 if not jnp.isclose(state.values[axis], val, atol=10 ** -self.precision):
