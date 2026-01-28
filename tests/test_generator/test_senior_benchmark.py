@@ -8,7 +8,8 @@ from src.field_dynamic_system.core.field.mappings import DiscreteFieldMapper
 from src.field_dynamic_system.core.state.discrete import VectorStateSpace, VectorState
 from src.field_dynamic_system.neighbor.discrete import VectorGridTopology, WeightedVectorGridTopology
 from src.field_dynamic_system.generator.kernel import AbstractTransitionKernel
-from src.field_dynamic_system.generator.field_genetators import DiscreteFieldGenerator
+from src.field_dynamic_system.generator.field_genetators import DiscreteFieldGenerator, \
+    GenericMarkovianDiscreteFieldGenerator
 from src.field_dynamic_system.core.field.compositions import AdditionComposition
 
 
@@ -66,7 +67,7 @@ def test_senior_engineer_benchmark():
 
     t0_build = time.time()
     real_topo = WeightedVectorGridTopology(real_space, deltas, weight=1.0 / DIMENSIONS)
-    gen = DiscreteFieldGenerator(
+    gen = GenericMarkovianDiscreteFieldGenerator(
         topology=real_topo, kernel=DummyKernel(),
         intrinsic_transform=SimpleNormalizer(), extrinsic_transform=SimpleNormalizer(),
         step_composer=AdditionComposition(), chain_composer=None, global_composer=None

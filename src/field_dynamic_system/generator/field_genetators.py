@@ -1,3 +1,5 @@
+from abc import ABC
+
 import jax
 import jax.numpy as jnp
 from typing import Optional
@@ -7,7 +9,15 @@ from src.field_dynamic_system.generator.generator_interfaces import IDiscreteFie
 from src.field_dynamic_system.core.field.compositions import FieldComposition, AdditionComposition
 
 
-class DiscreteFieldGenerator(IDiscreteFieldGenerator):
+# 2. THE ABSTRACT BASE (Entry Point)
+class DiscreteFieldGenerator(IDiscreteFieldGenerator, ABC):
+    """
+    Acts as an entry point.
+    Future shared logic for ALL generators (validation, logging) goes here.
+    """
+    pass
+
+class GenericMarkovianDiscreteFieldGenerator(DiscreteFieldGenerator):
     def __init__(self,
                  topology,
                  kernel,

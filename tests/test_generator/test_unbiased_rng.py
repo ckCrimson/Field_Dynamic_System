@@ -9,7 +9,8 @@ from src.field_dynamic_system.core.field.mappings import DiscreteFieldMapper
 from src.field_dynamic_system.core.state.discrete import VectorStateSpace, VectorState
 from src.field_dynamic_system.neighbor.discrete import DiscreteTopology
 from src.field_dynamic_system.generator.kernel import AbstractTransitionKernel
-from src.field_dynamic_system.generator.field_genetators import DiscreteFieldGenerator
+from src.field_dynamic_system.generator.field_genetators import DiscreteFieldGenerator, \
+    GenericMarkovianDiscreteFieldGenerator
 
 # ONLY STANDARD COMPONENTS
 from src.field_dynamic_system.core.field.compositions import AdditionComposition
@@ -75,7 +76,7 @@ def test_rng_markov_automatic():
     mapper.apply_vector(jnp.zeros((len(grid), 1)).at[start_idx].set(1.0))
 
     # 2. GENERATOR
-    rng_generator = DiscreteFieldGenerator(
+    rng_generator = GenericMarkovianDiscreteFieldGenerator(
         topology=RNGTopology(space, D),
         kernel=UnbiasedKernel(prob=1.0 / D),
 

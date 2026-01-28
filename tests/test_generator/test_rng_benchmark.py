@@ -9,7 +9,8 @@ from src.field_dynamic_system.core.field.mappings import DiscreteFieldMapper
 from src.field_dynamic_system.core.state.discrete import VectorStateSpace, VectorState
 from src.field_dynamic_system.neighbor.discrete import VectorGridTopology
 from src.field_dynamic_system.generator.kernel import AbstractTransitionKernel
-from src.field_dynamic_system.generator.field_genetators import DiscreteFieldGenerator
+from src.field_dynamic_system.generator.field_genetators import DiscreteFieldGenerator, \
+    GenericMarkovianDiscreteFieldGenerator
 from src.field_dynamic_system.core.field.compositions import AdditionComposition
 
 
@@ -77,8 +78,8 @@ def test_honest_dynamic_benchmark():
     # START THE CLOCK (Total Wall Time)
     T0_TOTAL = time.time()
 
-    DIMENSIONS = 3
-    STEPS = 50
+    DIMENSIONS = 4
+    STEPS = 6
 
     # 1. INITIALIZATION
     seed_tuple = tuple([0] * DIMENSIONS)
@@ -116,7 +117,7 @@ def test_honest_dynamic_benchmark():
     # USE WEIGHTED TOPOLOGY (1/6 probability per edge)
     real_topo = WeightedVectorGridTopology(real_space, deltas, weight=1.0 / DIMENSIONS)
 
-    gen = DiscreteFieldGenerator(
+    gen = GenericMarkovianDiscreteFieldGenerator(
         topology=real_topo,
         kernel=DummyKernel(),  # Weights handled by topology
         intrinsic_transform=SimpleNormalizer(),
