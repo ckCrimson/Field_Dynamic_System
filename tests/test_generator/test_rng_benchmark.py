@@ -79,7 +79,7 @@ def test_honest_dynamic_benchmark():
     T0_TOTAL = time.time()
 
     DIMENSIONS = 4
-    STEPS = 6
+    STEPS = 45
 
     # 1. INITIALIZATION
     seed_tuple = tuple([0] * DIMENSIONS)

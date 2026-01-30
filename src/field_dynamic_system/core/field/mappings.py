@@ -184,6 +184,35 @@ class DiscreteFieldMapper(IFieldMapper):
             self.explicit_buffer = jnp.vstack([self.explicit_buffer, val_pad])
             self.mask_buffer = jnp.vstack([self.mask_buffer, mask_pad])
 
+    def export_to_dict(self):
+        """
+        Helper for debugging and testing.
+        Converts the internal JAX buffer back to a dictionary {AbstractState: Value}.
+        """
+        import numpy as np  # Local import to avoid clutter
+
+        # 1. Pull data from GPU/JAX to CPU Numpy
+        # We use np.array() to detach it from JAX's tracker
+        buffer_np = np.array(self.explicit_buffer)
+
+        result = {}
+
+        # 2. Map Indices -> Abstract Names
+        # We assume the state_space has a .states list (Standard for Abstract Spaces)
+        # If it's a Grid, this might return coordinates.
+        if hasattr(self.state_space, 'states'):
+            # Abstract Case: ["Source", "Router", ...]
+            all_states = self.state_space.states
+            for idx, state_obj in enumerate(all_states):
+                if idx < len(buffer_np):
+                    result[state_obj] = buffer_np[idx]
+        else:
+            # Fallback for Coordinate Grids (Just return Index -> Value)
+            for idx in range(len(buffer_np)):
+                result[f"State_{idx}"] = buffer_np[idx]
+
+        return result
+
 
 # =========================================================
 # 3. CONTINUOUS ENGINE (The "Wind")
