@@ -34,6 +34,17 @@ class DiscreteTopology(Topology, ABC):
     def compute_neighbors(self, state_val: Any) -> Sequence[Any]:
         pass
 
+        # Inside DiscreteTopology class...
+
+    def get_adjacency_matrix(self, kernel=None, context_mapper=None):
+            """
+            Alias to satisfy the GenericMarkovianGenerator interface.
+            It simply returns the cached matrix you already built.
+            """
+            # We ignore 'kernel' because DiscreteTopology builds its own structure
+            # (based on grids/graphs) independent of dynamic physics.
+            return self.adjacency_matrix
+
     @property
     def adjacency_matrix(self) -> sparse.BCOO:
         if self._adjacency_matrix is None:

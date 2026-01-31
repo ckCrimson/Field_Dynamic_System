@@ -110,6 +110,17 @@ class DiscreteFieldMapper(IFieldMapper):
         raw = self._get_batch(indices)
         return [FieldValue(row) for row in raw]
 
+    def get_value_at(self, query):
+        if isinstance(query, (list, tuple)):
+            indices = self.state_space.register_states(query)
+        elif isinstance(query, (int, jnp.ndarray, np.ndarray, float)):
+            indices = jnp.asarray(query, dtype=jnp.int32)
+        else:
+            indices = self.state_space.register_states([query])
+
+        raw = self._get_batch(indices)
+        return [raw]
+
     @jit
     def _get_batch(self, indices):
         valid_mask = (indices >= 0) & (indices < self.explicit_buffer.shape[0])

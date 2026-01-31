@@ -1,8 +1,4 @@
-
-import jax.numpy as jnp
-from jax import vmap
-from abc import ABC, abstractmethod
-
+from typing import Any
 import jax.numpy as jnp
 from jax import vmap
 from abc import ABC, abstractmethod
@@ -10,159 +6,156 @@ from abc import ABC, abstractmethod
 from src.field_dynamic_system.core.field.mappings import DiscreteFieldMapper
 
 
-# --- LEVEL 1: THE ROOT CONTRACT (For Performance Experts) ---
+# ==========================================
+# 1. THE ROOT CONTRACT (Indices Based)
+# ==========================================
 class AbstractTransitionKernel(ABC):
     """
-    The minimal contract required by the generator.
-    If you know how to write vectorized JAX code (matrix multiplication, etc.),
-    inherit from this directly.
+    The minimal contract.
+    Must accept 'edge_indices' because Topology-Based kernels (Uniform/Normalized)
+    need access to the Graph Structure (node degrees), not just values.
     """
 
     @abstractmethod
     def compute_raw_batch(self,
-                          source_batch: jnp.ndarray,
-                          target_batch: jnp.ndarray,
-                          context_mapper: 'DiscreteFieldMapper') -> jnp.ndarray:
+                          edge_indices: jnp.ndarray,
+                          context_mapper: 'DiscreteFieldMapper' ) -> jnp.ndarray:
         """
-        Must return shape (Batch_Size, Field_Dim).
-        The user is responsible for ensuring this is efficient.
+        Args:
+            edge_indices: Shape (N_Edges, 2) -> [Source_ID, Target_ID]
+            context_mapper: Access to the State Space and values.
+        Returns:
+            Weights: Shape (N_Edges, 1)
         """
         pass
 
 
-# --- LEVEL 2: THE CONVENIENCE LAYER (For Physics Logic) ---
+# ==========================================
+# 2. THE CONVENIENCE LAYER (Any Type Support)
+# ==========================================
 class ElementwiseKernel(AbstractTransitionKernel):
     """
-    A helper class for users who want to define physics for a single pair
-    and let the system handle the vectorization (vmap).
+    A kernel that handles the data fetching for you.
+    Supports both JAX Arrays (Fast) and Arbitrary Python Objects (Generic).
     """
 
-    def compute_raw_batch(self, source_batch, target_batch, context_mapper):
-        # We automatically vectorize the user's single-item logic
-        # in_axes=(0, 0) means "iterate over the first dimension of both inputs"
-        vectorized_func = vmap(self.compute_transition_value, in_axes=(0, 0))
-
-        # We assume the user logic doesn't need the context_mapper inside the loop
-        # (Pass necessary constants via __init__ if needed)
-        return vectorized_func(source_batch, target_batch)
-
-    @abstractmethod
-    def compute_transition_value(self, state_0: jnp.ndarray, state_out: jnp.ndarray) -> jnp.ndarray:
-        """
-        Define logic for ONE pair.
-        System calls this 1,000,000 times in parallel.
-        """
-        pass
-# --- Example Implementation: Uniform Diffusion ---
-class UniformKernel(AbstractTransitionKernel):
     def compute_raw_batch(self, edge_indices, context_mapper):
-        # edge_indices shape: (N_edges, 2) -> [Source_ID, Target_ID]
-        sources = edge_indices[:, 0]
-
-        # 1. Calculate Degree (Count occurrences of each source)
-        # We need to know how many times each source appears to normalize.
-        # jnp.unique with return_counts is good, but for raw speed/simplicity
-        # in this specific topology (degree is constant 2 everywhere except boundaries),
-        # we can compute it properly.
-
-        # Count outgoing edges for each source index
-        # We assume indices are dense or mapped to 0..N-1
-
-        # Get counts for every source ID involved in edges
-        unique_src, counts = jnp.unique(sources, return_counts=True)
-
-        # 2. Map counts back to edges
-        # We need an array of size N_edges where each entry is the degree of that edge's source.
-        # Strategy: Use a lookup array if IDs are small integers (which they are here).
-        max_id = int(jnp.max(sources)) + 1
-        degree_map = jnp.zeros(max_id, dtype=jnp.float32)
-        degree_map = degree_map.at[unique_src].set(counts.astype(jnp.float32))
-
-        degrees = degree_map[sources]  # Gather degrees for each edge
-
-        # 3. Probability = 1.0 / Degree
-        probs = 1.0 / degrees
-
-        return probs.reshape((-1, 1))
-
-
-# ==========================================
-# 2. THE ABSTRACTION LAYER (Scientist Level)
-# ==========================================
-class CoordinateKernel(AbstractTransitionKernel):
-    """
-    The Scientist's Helper.
-    Automatically handles the "Gather" operation.
-    You just define the physics between two state vectors (Coordinate A -> Coordinate B).
-    """
-
-    def compute_raw_batch(self, edge_indices: jnp.ndarray, context_mapper) -> jnp.ndarray:
-        # 1. ACCESS HARDWARE MEMORY
-        # We assume the space has a matrix representation of states.
-        # Shape: (Total_States, Dimensions)
-        all_coords = jnp.array(context_mapper.discrete_space.get_matrix())
-
-        # 2. GATHER VECTORS (The Boilerplate)
+        # 1. RESOLVE INDICES TO STATES
         src_ids = edge_indices[:, 0]
         tgt_ids = edge_indices[:, 1]
 
-        # JAX instant lookup
-        source_states = all_coords[src_ids]
-        target_states = all_coords[tgt_ids]
+        space = context_mapper.state_space
 
-        # 3. VECTORIZE USER LOGIC
-        # We use vmap to turn your single-item logic into a batch processor
-        vectorized_func = vmap(self.compute, in_axes=(0, 0))
+        # CHECK 1: Is the Space Vectorized? (Coordinates)
+        if hasattr(space, 'get_matrix'):
+            # --- FAST PATH (JAX) ---
+            # The space is a matrix (e.g., Grid, Embedding). We use JAX Gather.
+            all_states = jnp.array(space.get_matrix())
+            src_batch = all_states[src_ids]
+            tgt_batch = all_states[tgt_ids]
 
-        return vectorized_func(source_states, target_states)
+            # Vectorize the user logic
+            vectorized_func = vmap(self.compute_transition_value)
+            return vectorized_func(src_batch, tgt_batch)
+
+        # CHECK 2: Is the Space Generic? (Python Objects)
+        else:
+            # --- GENERIC PATH (Python Loop) ---
+            # The space is a list of objects (e.g., Strings, Custom Classes).
+            # We must fetch manually.
+
+            # Assuming space exposes a way to get state by index (usually a list)
+            # If space.states is a list:
+            all_states = list(space.states)
+
+            # Gather (List Comprehension)
+            # We convert JAX indices to Python ints for list indexing
+            src_ids_py = src_ids.tolist()
+            tgt_ids_py = tgt_ids.tolist()
+
+            results = []
+            for s_idx, t_idx in zip(src_ids_py, tgt_ids_py):
+                state_a = all_states[s_idx]
+                state_b = all_states[t_idx]
+
+                # Call user logic on raw objects
+                val = self.compute_transition_value(state_a, state_b)
+                results.append(val)
+
+            # Return as JAX array (The System requires numeric weights)
+            return jnp.array(results).reshape(-1, 1)
 
     @abstractmethod
-    def compute(self, source_state: jnp.ndarray, target_state: jnp.ndarray) -> jnp.ndarray:
+    def compute_transition_value(self, state_0: Any, state_out: Any) -> Any:
         """
-        Define your physics here for a SINGLE pair.
-
-        Args:
-            source_state: Vector (D,)
-            target_state: Vector (D,)
-        Returns:
-            Scalar Weight or Vector Field
+        Define logic for ONE pair.
+        Can receive Tuples, Strings, Objects, or Floats.
+        Must return a float/scalar.
         """
         pass
 
 
 # ==========================================
-# 3. CONCRETE IMPLEMENTATIONS
+# 3. TOPOLOGY KERNELS (Require Indices)
 # ==========================================
 
 class UnbiasedKernel(AbstractTransitionKernel):
     """
-    The Default Kernel.
-    Assigns a uniform weight (probability) to every connection.
-    Does NOT need to look up coordinates (Physics is identical everywhere).
+    Assigns uniform probability 1.0.
+    Does not care about state values.
     """
 
     def __init__(self, prob: float = 1.0):
         self.prob = prob
 
-    def compute_raw_batch(self, source_batch, target_batch, context_mapper) -> jnp.ndarray:
-        # No gather needed. Just return 1.0s.
-        # source_batch is used just to know the size (N).
-        N = source_batch.shape[0]
-
-        # Return shape (N, 1)
+    def compute_raw_batch(self, edge_indices, context_mapper) -> jnp.ndarray:
+        N = edge_indices.shape[0]
         return jnp.full((N, 1), self.prob, dtype=jnp.float32)
 
 
-class DistanceDecayKernel(CoordinateKernel):
+class UniformKernel(AbstractTransitionKernel):
     """
-    Example of a Coordinate-Aware Kernel.
-    Weight decays with distance: 1 / (d^2 + epsilon)
+    Calculates 1/Degree based on topology structure.
     """
 
+    def compute_raw_batch(self, edge_indices, context_mapper):
+        sources = edge_indices[:, 0]
+
+        # 1. Count Degrees
+        # Note: We use bincount for efficiency on integer IDs
+        max_id = jnp.max(sources) + 1
+        degrees = jnp.bincount(sources, minlength=max_id)
+
+        # 2. Map back to edges
+        edge_degrees = degrees[sources]
+
+        # 3. Prob = 1/Degree
+        safe_degrees = jnp.where(edge_degrees == 0, 1.0, edge_degrees)
+        probs = 1.0 / safe_degrees
+
+        return probs.reshape(-1, 1)
+
+
+# ==========================================
+# 4. COORDINATE KERNEL (Fast JAX Only)
+# ==========================================
+class CoordinateKernel(AbstractTransitionKernel):
+    """
+    Specialized for Spatial Physics. Assumes states are numeric vectors.
+    """
+
+    def compute_raw_batch(self, edge_indices, context_mapper) -> jnp.ndarray:
+        # Optimization: Direct Matrix Gather
+        all_coords = jnp.array(context_mapper.state_space.get_matrix())
+
+        src_ids = edge_indices[:, 0]
+        tgt_ids = edge_indices[:, 1]
+
+        source_states = all_coords[src_ids]
+        target_states = all_coords[tgt_ids]
+
+        return vmap(self.compute)(source_states, target_states)
+
+    @abstractmethod
     def compute(self, source_state, target_state):
-        # Euclidean Distance
-        delta = target_state - source_state
-        dist_sq = jnp.sum(delta ** 2)
-
-        # Inverse Square Law
-        return (1.0 / (dist_sq + 1e-6)).reshape(1)
+        pass
