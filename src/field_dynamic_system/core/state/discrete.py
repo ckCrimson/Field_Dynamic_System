@@ -109,6 +109,37 @@ class AbstractDiscreteStateSpace(IDiscreteStateSpace):
         return self._state_to_idx.get(state_obj, -1)
 
     # --- Map Operation ---
+
+        # --- MISSING METHOD ADDED HERE ---
+    def get_matrix(self):
+        """
+        Converts states to a numerical Matrix (N, D).
+        Required by Kernels (Gaussian, etc.) to compute distances.
+        """
+        if not self._idx_to_state:
+            return np.empty((0, 0), dtype=np.float32)
+
+        first = self._idx_to_state[0]
+
+        # Case 1: Simple Scalars (Integers/Floats) -> Convert to (N, 1) column vector
+        # This handles your test case: [-5, -4, ... 5]
+        if isinstance(first, (int, float, np.number)):
+            return np.array(self._idx_to_state, dtype=np.float32).reshape(-1, 1)
+
+        # Case 2: Vectors/Tuples -> Convert to (N, D) matrix
+        if hasattr(first, '__len__') and not isinstance(first, str):
+            try:
+                return np.array([list(s) for s in self._idx_to_state], dtype=np.float32)
+            except:
+                # Handle VectorState objects
+                if hasattr(first, 'values'):
+                    return np.array([s.values for s in self._idx_to_state], dtype=np.float32)
+                elif hasattr(first, 'coordinates'):
+                    return np.array([s.coordinates for s in self._idx_to_state], dtype=np.float32)
+
+        # Case 3: Objects without coordinates -> Return empty (Kernel will fail gracefully or warn)
+        return np.zeros((len(self._idx_to_state), 0), dtype=np.float32)
+
     def map(self, func: Callable[[Any], Any]) -> Union[jnp.ndarray, List[Any], np.ndarray]:
         """
         Base Map implementation. Safe for all data types.
@@ -169,6 +200,7 @@ class AbstractDiscreteStateSpace(IDiscreteStateSpace):
         obj._state_to_idx = {s: i for i, s in enumerate(states)}
         obj._encoder = encoder
         return obj
+
 
 
 # --- 3. VECTOR STATE SPACE (FIXED) ---

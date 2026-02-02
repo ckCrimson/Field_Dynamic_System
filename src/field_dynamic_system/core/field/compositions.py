@@ -1,3 +1,5 @@
+from typing import Optional, Tuple, Any
+
 import jax.numpy as jnp
 import jax.ops
 from abc import ABC, abstractmethod
@@ -72,14 +74,16 @@ class ClosedFieldComposition(ContainedFieldComposition):
 class AdditionComposition(ClosedFieldComposition):
     """
     Algebra: Summation (+)
-    Robust to Zeros automatically (a + 0 = a).
+    Identity: Zero (Scalar 0.0 or Vector [0,0,...])
     """
 
     def compose(self, a: jnp.ndarray, b: jnp.ndarray) -> jnp.ndarray:
         return a + b
 
-    def get_identity(self) -> float:
-        return 0.0
+    def get_identity(self, shape: Optional[Tuple[int, ...]] = None, dtype=jnp.float32) -> Any:
+        if shape is None:
+            return 0.0
+        return jnp.zeros(shape, dtype=dtype)
 
     # compose_reduction uses default (segment_sum)
 
@@ -87,42 +91,41 @@ class AdditionComposition(ClosedFieldComposition):
 class MultiplicationComposition(ClosedFieldComposition):
     """
     Algebra: Product (*)
-
-    FIXED LOGIC: Asymmetric Identity.
-    - 'a' (Signal): Must be present. If 0, result is 0.
-    - 'b' (Context): If 0 (Empty Space), treated as 1.0 (Identity) to allow signal entry.
+    Identity: Unity (Scalar 1.0 or Vector [1,1,...])
     """
 
     def compose(self, a: jnp.ndarray, b: jnp.ndarray) -> jnp.ndarray:
-        # 1. Define Null/Empty Value
+        # 1. Define Null/Empty Value (Scalar zero broadcasts to vector zero)
         zeros = 0.0
 
-        # 2. Context Safety ONLY:
-        # We only swap 'b' (Target/Global) to Identity.
-        # We DO NOT swap 'a' (Incoming Signal). If Signal is 0, Output must be 0.
+        # 2. Context Safety (Asymmetric Identity)
+        # We treat "Empty Context" (b=0) as Identity (1.0) so signals can enter.
+        # We DO NOT touch 'a' (Signal). If Signal is 0, it stays 0.
         b_safe = jnp.where(b == zeros, 1.0, b)
 
-        # 3. Compute Product
-        # Case: Signal(0.5) * Empty(0.0->1.0) = 0.5 (Propagates)
-        # Case: NoSignal(0.0) * Full(1.0)     = 0.0 (No Ghost Mass)
         return a * b_safe
 
-    def get_identity(self) -> float:
-        return 1.0
+    def get_identity(self, shape: Optional[Tuple[int, ...]] = None, dtype=jnp.float32) -> Any:
+        if shape is None:
+            return 1.0
+        return jnp.ones(shape, dtype=dtype)
 
     def compose_reduction(self, values: jnp.ndarray, indices: jnp.ndarray, num_segments: int) -> jnp.ndarray:
+        # Critical: Product reduction must initialize with 1.0
         return jax.ops.segment_prod(values, indices, num_segments=num_segments)
 
 
 class InnerProductComposition(ContainedFieldComposition):
     """
     Algebra: Dot Product.
-    Note: Zeros here usually mean orthogonality or lack of projection,
-    so standard 0.0 behavior is mathematically correct.
+    Output is always a Scalar Field (N, 1), regardless of input vector size.
     """
 
     def compose(self, a: jnp.ndarray, b: jnp.ndarray) -> jnp.ndarray:
         return jnp.sum(a * b, axis=-1, keepdims=True)
 
-    def get_identity(self) -> float:
-        return 0.0
+    def get_identity(self, shape: Optional[Tuple[int, ...]] = None, dtype=jnp.float32) -> Any:
+        # Inner Product identity is technically zero (orthogonality)
+        if shape is None:
+            return 0.0
+        return jnp.zeros(shape, dtype=dtype)

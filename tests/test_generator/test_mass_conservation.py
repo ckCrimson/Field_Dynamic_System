@@ -50,7 +50,7 @@ def test_real_generator_mass_conservation():
     # 3. SETUP TRANSFORM DATA (Crucial Step)
     # We query the topology to build the correct normalization vector
     raw_kernel = UnbiasedKernel(prob=1.0)
-    matrix = topo.get_adjacency_matrix(raw_kernel)
+    matrix = topo.get_adjacency_matrix()
 
     # Calculate Out-Degree
     src_indices = matrix.indices[:, 1]

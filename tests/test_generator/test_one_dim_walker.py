@@ -46,21 +46,21 @@ def test_walker_survives_multiplication():
         topology=topology,
         kernel=OneDimWalkerKernel(),
         step_composer=AdditionComposition(),
-        chain_composer=MultiplicationComposition(),  # <--- TESTING THIS
+        chain_composer=MultiplicationComposition(),
         global_composer=None,
         intrinsic_transform=L1Normalizer(),
         extrinsic_transform=L1Normalizer()
     )
 
-    result = generator.generate_multi_step(field_mapper, steps=1)
+    result = generator.generate_multi_step(field_mapper, steps=2)
 
     # Check Neighbors
     def get_val(v):
         idx = space.get_index_of(v)
         return float(result.raw_buffer[idx][0])
 
-    val_neg = get_val(-1)
-    val_pos = get_val(1)
+    val_neg = get_val(-2)
+    val_pos = get_val(2)
 
     print(f"-> Neighbor -1: {val_neg}")
     print(f"-> Neighbor +1: {val_pos}")

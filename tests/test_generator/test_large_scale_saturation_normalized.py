@@ -52,7 +52,7 @@ def test_large_scale_saturation_normalized():
     # 3. SETUP NORMALIZER (The Fix)
     # Get raw structure to calculate degrees
     raw_kernel = UnbiasedKernel(prob=1.0)
-    matrix = topology.get_adjacency_matrix(raw_kernel)
+    matrix = topology.get_adjacency_matrix()
 
     # Calculate Out-Degree
     src_indices = matrix.indices[:, 1]
