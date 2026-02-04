@@ -4,31 +4,35 @@ from .base import IOperator, InteractionContext, Observation
 
 class ClassicalOperator(IOperator):
     """
-    A Dual-Mode Classical Observer.
+    A Pure Classical Operator.
 
-    1. Active Mode: If initialized with a transition_fn, it drives the physics.
-    2. Passive Mode: If initialized with None, it simply observes.
+    It does NOT mutate the system. It strictly transforms input -> output.
+
+    Modes:
+    1. Active (Simulator):  Input State + Context -> Next State (Trajectory)
+    2. Passive (Viewer):    Input State -> Input State (Identity)
     """
 
     def __init__(self, transition_fn: Optional[Callable[[Any, int], Any]] = None):
         """
         Args:
-            transition_fn: Optional function f(state, action) -> new_state.
-                           If None, the operator acts as a read-only viewer.
+            transition_fn: Function f(state, action_id) -> next_state.
+                           If None, operator acts as a pass-through (Identity).
         """
         self.transition_fn = transition_fn
 
-    def observe(self, system_state: Any, context: InteractionContext) -> Observation:
-        # 1. READ
-        current_val = system_state.value
+    def observe(self, state: Any, context: InteractionContext) -> Observation:
+        """
+        Args:
+            state: The current immutable state (e.g., VectorState).
+            context: The input/context for the step.
 
-        # 2. LOGIC (Conditional)
+        Returns:
+            The Observed State (either the same state or the next calculated state).
+        """
+        # 1. Active Mode: Calculate Trajectory
         if self.transition_fn is not None:
-            # Active Mode: Calculate -> Update
-            next_val = self.transition_fn(current_val, context.action_id)
-            system_state.value = next_val
-            return next_val
+            return self.transition_fn(state, context.action_id)
 
-        # 3. RETURN (Passive Mode)
-        # No logic provided, so we just return what we see.
-        return current_val
+        # 2. Passive Mode: What you see is what you have
+        return state
