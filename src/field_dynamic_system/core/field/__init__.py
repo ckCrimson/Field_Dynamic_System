@@ -17,4 +17,5 @@ __all__ = [
     "IFieldMapper",
     "FieldSpaceTransformer",
     "FieldSpaceComposer",
+    "FieldMapper"
 ]

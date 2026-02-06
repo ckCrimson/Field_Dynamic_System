@@ -159,6 +159,18 @@ class IdentityEncoder(StateEncoder):
             return tuple(flat.tolist())
 
 
+class LazyEncoder(StateEncoder):
+    """
+    A minimal encoder for Lazy Spaces where data is already numeric.
+    """
+
+    def encode(self, state: Any) -> jnp.ndarray:
+        # Assume state is already a vector/tuple
+        return jnp.array(state)
+
+    def decode(self, vector: jnp.ndarray) -> Any:
+        return vector
+
 class RegistryEncoder(StateEncoder):
     def __init__(self, states: List[AbstractState]):
         self.states = states

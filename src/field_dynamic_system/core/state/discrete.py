@@ -8,7 +8,7 @@ import numpy as np
 
 # Ensure these imports match your project structure
 from .interfaces import IDiscreteStateSpace, StateEncoder, StateSpace, State
-from .encoding import BitMaskingEncoding, VectorEncoding
+from .encoding import BitMaskingEncoding, VectorEncoding, LazyEncoder
 from .state import VectorState
 
 
@@ -201,10 +201,210 @@ class AbstractDiscreteStateSpace(IDiscreteStateSpace):
         obj._encoder = encoder
         return obj
 
+    def get_state_by_id(self, idx: Union[int, jnp.ndarray, np.ndarray]) -> Any:
+        """
+        Retrieves the State object corresponding to a numeric ID.
+
+        Args:
+            idx: The integer index (can be Python int, NumPy int, or JAX scalar).
+
+        Returns:
+            The actual State object.
+        """
+        # 1. Normalize Input (Handle JAX/NumPy scalars via .item())
+        # This fixes errors where 'idx' is a JAX array from argmax
+        if hasattr(idx, 'item'):
+            i = int(idx.item())
+        else:
+            i = int(idx)
+
+        # 2. Bounds Check
+        if i < 0 or i >= len(self._idx_to_state):
+            raise IndexError(f"State ID {i} out of bounds. Space size: {len(self._idx_to_state)}")
+
+        # 3. Lookup
+        return self._idx_to_state[i]
+
+# ----3. Lazy Discrete State Space -----------#
+# --- HELPER: Fast Row-wise Set Operations ---
+def _view_as_void(arr):
+    """
+    Tricks NumPy into treating each row (N, D) as a single element.
+    Essential for fast set operations (union/intersection) on matrices.
+    """
+    arr = np.ascontiguousarray(arr)
+    return arr.view(np.dtype((np.void, arr.dtype.itemsize * arr.shape[1])))
 
 
-# --- 3. VECTOR STATE SPACE (FIXED) ---
-# --- 3. VECTOR STATE SPACE (FIXED) ---
+def _unique_rows(arr):
+    """Returns unique rows from a matrix."""
+    if arr.size == 0: return arr
+    _, idx = np.unique(_view_as_void(arr), return_index=True)
+    return arr[np.sort(idx)]
+
+
+def _intersect_matrices(A, B):
+    """Finds rows present in both A and B."""
+    if A.size == 0 or B.size == 0:
+        return np.empty((0, A.shape[1]), dtype=A.dtype)
+
+    voidA = _view_as_void(A)
+    voidB = _view_as_void(B)
+
+    # 1D Intersection on void views
+    # intersect1d returns sorted unique elements
+    common_void = np.intersect1d(voidA, voidB)
+
+    # Convert back to original type
+    return common_void.view(A.dtype).reshape(-1, A.shape[1])
+
+
+class LazyDiscreteStateSpace(IDiscreteStateSpace):
+    """
+    Data-Oriented State Space.
+    Supports Set Operations directly on the memory buffer.
+    """
+
+    def __init__(self, raw_data: Union[np.ndarray, jnp.ndarray], wrapper_class: Callable):
+        # Enforce 2D shape (N, D) even for 1D inputs
+        self._raw_data = np.array(raw_data)
+        if self._raw_data.ndim == 1:
+            self._raw_data = self._raw_data.reshape(-1, 1)
+
+        self._wrapper = wrapper_class
+        self._size = self._raw_data.shape[0]
+        self._encoder = LazyEncoder()
+
+    # --- 1. SET OPERATIONS (Raw Data Mode) ---
+
+    def union(self, other: 'StateSpace') -> 'LazyDiscreteStateSpace':
+        """
+        Returns a NEW LazySpace combining rows from both spaces.
+        Operation: Stack -> Unique.
+        """
+        if not isinstance(other, LazyDiscreteStateSpace):
+            raise TypeError("Lazy union requires another LazyDiscreteStateSpace.")
+
+        # 1. Stack Data
+        combined = np.vstack((self._raw_data, other._raw_data))
+
+        # 2. Filter Duplicates (Fast Raw Logic)
+        unique_combined = _unique_rows(combined)
+
+        # 3. Return New Space
+        return LazyDiscreteStateSpace(unique_combined, self._wrapper)
+
+    def intersection(self, other: 'StateSpace') -> 'LazyDiscreteStateSpace':
+        """
+        Returns a NEW LazySpace with rows common to both.
+        Operation: View Void -> Intersect1d.
+        """
+        if not isinstance(other, LazyDiscreteStateSpace):
+            raise TypeError("Lazy intersection requires another LazyDiscreteStateSpace.")
+
+        # 1. Fast Matrix Intersection
+        common_data = _intersect_matrices(self._raw_data, other._raw_data)
+
+        # 2. Return New Space
+        return LazyDiscreteStateSpace(common_data, self._wrapper)
+
+    def create_subset(self, indices_or_states: Sequence[Any]) -> 'LazyDiscreteStateSpace':
+        """
+        Creates a Subset Space.
+        Optimized to accept a list of Indices (Integers) to slice the matrix.
+        """
+        # If input is indices (Fast Slicing)
+        if isinstance(indices_or_states, (np.ndarray, slice, list)) and \
+                (isinstance(indices_or_states, slice) or np.issubdtype(np.array(indices_or_states).dtype, np.integer)):
+            subset_data = self._raw_data[indices_or_states]
+            return LazyDiscreteStateSpace(subset_data, self._wrapper)
+
+        raise NotImplementedError("For Lazy Spaces, create_subset requires Indices (int array).")
+
+    # --- 2. TRANSFORMATION (Map) ---
+
+    def map_raw(self, func: Callable[[np.ndarray], np.ndarray],
+                new_wrapper: Callable = None) -> 'LazyDiscreteStateSpace':
+        """
+        Vectorized Map: Transforms the underlying matrix directly.
+
+        Args:
+            func: A function f(Matrix_A) -> Matrix_B
+            new_wrapper: Optional new wrapper if dimensionality changes.
+        """
+        # Apply vector function to entire matrix
+        new_data = func(self._raw_data)
+
+        # Use new wrapper if provided, else inherit
+        wrap = new_wrapper if new_wrapper else self._wrapper
+
+        return LazyDiscreteStateSpace(new_data, wrap)
+
+    def map(self, func: Callable[[Any], Any]):
+        """Standard Object Map (Slow - exists for compatibility)."""
+        results = []
+        for i in range(self._size):
+            s = self.get_state_by_id(i)
+            results.append(func(s))
+        return results
+
+    # --- 3. STANDARD PROTOCOL METHODS ---
+
+    @property
+    def num_states(self) -> int:
+        return self._size
+
+    def size(self) -> int:
+        return self._size
+
+    @property
+    def encoder(self) -> StateEncoder:
+        return self._encoder
+
+    def get_matrix(self) -> jnp.ndarray:
+        return jnp.array(self._raw_data)
+
+    def get_state_by_id(self, idx: Union[int, jnp.ndarray]) -> Any:
+        if hasattr(idx, 'item'):
+            i = int(idx.item())
+        else:
+            i = int(idx)
+        if i < 0 or i >= self._size: raise IndexError(f"Index {i} out of bounds.")
+
+        row = self._raw_data[i]
+        if row.size == 1: return self._wrapper(row.item())  # Handle scalar wrapper
+        return self._wrapper(*row)
+
+    def get_index_of(self, state_obj: Any) -> int:
+        raise NotImplementedError("Use Raw Data lookups.")
+
+    def register_states(self, states_batch: Sequence[Any]) -> jnp.ndarray:
+        if isinstance(states_batch, (np.ndarray, jnp.ndarray, range)):
+            return jnp.array(states_batch, dtype=jnp.int32)
+        if len(states_batch) > 0 and isinstance(states_batch[0], (int, np.integer)):
+            return jnp.array(states_batch, dtype=jnp.int32)
+        raise NotImplementedError("Use Indices for Lazy Space registration.")
+
+    def contains(self, state):
+        if isinstance(state, (int, np.integer)): return 0 <= state < self._size
+        return False
+
+    def ids_view(self):
+        return range(self._size)
+
+    @property
+    def states(self):
+        return [self.get_state_by_id(i) for i in range(self._size)]
+
+    # Pytree support
+    def _tree_flatten(self):
+        return (self._raw_data,), (self._wrapper,)
+
+    @classmethod
+    def _tree_unflatten(cls, aux, children):
+        return cls(children[0], aux[0])
+
+# --- 4. VECTOR STATE SPACE  ---
 class VectorStateSpace(AbstractDiscreteStateSpace):
     """
     Dynamic Vector Space with JAX broadcasting support.
@@ -318,7 +518,8 @@ class VectorStateSpace(AbstractDiscreteStateSpace):
                     matches.append(state)
         return self.create_subset(matches)
 
-# --- 4. INDEXED VECTOR SPACE (FIXED) ---
+
+# --- 5. INDEXED VECTOR SPACE ---
 class IndexedVectorStateSpace(VectorStateSpace):
     """
     An optimized VectorSpace that pre-builds lookup tables (Hash Maps).
@@ -414,3 +615,4 @@ class IndexedVectorStateSpace(VectorStateSpace):
                 final_states.append(state)
 
         return self.create_subset(final_states)
+

@@ -1,7 +1,7 @@
 import pytest
 from dataclasses import dataclass
 
-from src.field_dynamic_system.core.state import VectorState
+from src.field_dynamic_system.core import VectorState
 from src.field_dynamic_system.operator.base import InteractionContext
 from src.field_dynamic_system.operator.classical import ClassicalOperator
 

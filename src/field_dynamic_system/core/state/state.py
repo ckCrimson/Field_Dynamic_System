@@ -42,5 +42,13 @@ class AbstractState(State):
     name: Any
     properties: Dict[Any, Any] = field(default_factory=dict) # e.g. {'flammable': True}
 
+    @property
+    def value(self) -> Any:
+        """
+        Alias: Exposes 'name' as 'value'.
+        Fixes legacy naming inconsistency without breaking changes.
+        """
+        return self.name
+
     def __hash__(self):
         return hash(self.name)

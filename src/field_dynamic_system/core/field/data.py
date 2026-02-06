@@ -19,5 +19,8 @@ class RealFieldValue(FieldValue):
     """Scalar Real Field Value."""
     pass
 
-def extract_val(x: Union[FieldValue, RawData]) -> jnp.ndarray:
-    return x.value if isinstance(x, FieldValue) else jnp.asarray(x)
+def extract_val(value):
+    """Helper to extract raw value from JAX array or scalar."""
+    if hasattr(value, 'item'):
+        return value.item()
+    return value

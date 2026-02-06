@@ -11,6 +11,7 @@ from src.field_dynamic_system.core.field.algebra import IFieldAlgebra
 from src.field_dynamic_system.core.field.data import extract_val, FieldValue
 
 
+
 # =========================================================
 # 1. THE INTERFACE
 # =========================================================
@@ -224,6 +225,25 @@ class DiscreteFieldMapper(IFieldMapper):
 
         return result
 
+    def set_raw_values(self, states: Sequence[Any], values: Union[Sequence[float], jnp.ndarray]):
+        """
+        Batch update for multiple states at once.
+        """
+        # 1. Vectorized Lookup
+        indices = self.state_space.register_states(states)
+
+        # 2. Shape Handling
+        raw_vals = jnp.array(values, dtype=self.dtype)
+
+        # Auto-reshape (N,) -> (N, 1) if buffer is 2D
+        if self.explicit_buffer.ndim == 2 and raw_vals.ndim == 1:
+            raw_vals = raw_vals.reshape(-1, 1)
+
+        # 3. Single JAX Update
+        self.explicit_buffer = self.explicit_buffer.at[indices].set(raw_vals)
+        self.mask_buffer = self.mask_buffer.at[indices].set(True)
+        return self
+
 
 # =========================================================
 # 3. CONTINUOUS ENGINE (The "Wind")
@@ -317,6 +337,25 @@ class ContinuousFieldMapper(IFieldMapper):
 
             results.append(FieldValue(raw))
         return results
+
+    def set_raw_values(self, states: Sequence[Any], values: Union[Sequence[float], jnp.ndarray]):
+        """
+        Batch update for multiple states at once.
+        """
+        # 1. Vectorized Lookup
+        indices = self.state_space.register_states(states)
+
+        # 2. Shape Handling
+        raw_vals = jnp.array(values, dtype=self.dtype)
+
+        # Auto-reshape (N,) -> (N, 1) if buffer is 2D
+        if self.explicit_buffer.ndim == 2 and raw_vals.ndim == 1:
+            raw_vals = raw_vals.reshape(-1, 1)
+
+        # 3. Single JAX Update
+        self.explicit_buffer = self.explicit_buffer.at[indices].set(raw_vals)
+        self.mask_buffer = self.mask_buffer.at[indices].set(True)
+        return self
 
     def set_value_at(self, state, value):
         # --- FIXED: Removed problematic register_states call ---

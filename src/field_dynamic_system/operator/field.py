@@ -1,72 +1,49 @@
 import jax
 import jax.numpy as jnp
-from typing import Any, Callable
+from typing import Any, Callable, Union, List
 
 from .base import IOperator, InteractionContext, Observation
+from src.field_dynamic_system.core.field.mappings import FieldMapper
 
-# --- 1. Define the Strategy Signature ---
-# A pure function that looks at the field and context, and picks a State.
-SelectionStrategy = Callable[['FieldMapper', InteractionContext], Observation]
+SelectionStrategy = Callable[[jnp.ndarray, InteractionContext], Union[int, List[int]]]
 
 
-# --- 2. Standard Strategies (The "Menu") ---
 class Strategies:
-    """Collection of standard field collapse strategies."""
+    @staticmethod
+    def argmax(buffer: jnp.ndarray, context: InteractionContext) -> int:
+        # ravel() ensures we work on a flat array, even if buffer is (N, 1)
+        return int(jnp.argmax(buffer.ravel()))
 
     @staticmethod
-    def argmax(field_mapper: Any, context: InteractionContext) -> Observation:
-        """Deterministic: Picks the state with highest probability."""
-        idx = jnp.argmax(field_mapper.raw_buffer)
-        return field_mapper.index_to_state(int(idx))
+    def argmax_all(buffer: jnp.ndarray, context: InteractionContext) -> List[int]:
+        flat = buffer.ravel()
+        max_val = jnp.max(flat)
+        indices = jnp.where(jnp.isclose(flat, max_val))[0]
+        return [int(i) for i in indices]
 
     @staticmethod
-    def sample(field_mapper: Any, context: InteractionContext) -> Observation:
-        """Probabilistic: Samples based on field distribution."""
+    def sample(buffer: jnp.ndarray, context: InteractionContext) -> int:
         if context.rng_key is None:
-            raise ValueError("Strategy 'sample' requires rng_key in context")
+            raise ValueError("Strategy 'sample' requires rng_key")
 
-        logits = jnp.log(field_mapper.raw_buffer + 1e-10)
+        flat = buffer.ravel()
+        logits = jnp.log(flat + 1e-10)
         _, subkey = jax.random.split(context.rng_key)
+
+        # Returns a scalar JAX array, cast to int
         idx = jax.random.categorical(subkey, logits)
+        return int(idx)
 
-        return field_mapper.index_to_state(int(idx))
-
-
-# --- 3. The Unified Operator ---
 
 class FieldBasedOperator(IOperator):
-    """
-    A generic observer for Field systems.
-
-    Instead of subclassing, you inject the 'selection_strategy'
-    (Physics of Choice) at runtime.
-    """
-
     def __init__(self, selection_strategy: SelectionStrategy = Strategies.argmax):
-        """
-        Args:
-            selection_strategy: Function(field, context) -> state
-                                Defaults to Deterministic ArgMax.
-        """
         self.strategy = selection_strategy
 
-    def observe(self, system_state: Any, context: InteractionContext) -> Observation:
-        # 1. READ
-        current_field = system_state.field_mapper
+    def observe(self, field: FieldMapper, context: InteractionContext) -> Observation:
+        raw_buffer = field.raw_buffer
+        result_indices = self.strategy(raw_buffer, context)
 
-        # 2. SELECT (Delegate to the Strategy Function)
-        observation_state = self.strategy(current_field, context)
-
-        # 3. ENCODE & VALIDATE (Safety Check)
-        final_state_val = observation_state[-1] if isinstance(observation_state, list) else observation_state
-
-        try:
-            final_index = current_field.state_to_index(final_state_val)
-        except ValueError as e:
-            raise ValueError(f"Strategy selected invalid state {final_state_val}") from e
-
-        # 4. COLLAPSE (The "Measurement" Law)
-        current_field.collapse_to_impulse(final_index)
-
-        # 5. RETURN
-        return observation_state
+        if isinstance(result_indices, list):
+            return [field.state_space.get_state_by_id(idx) for idx in result_indices]
+        else:
+            return field.state_space.get_state_by_id(result_indices)
