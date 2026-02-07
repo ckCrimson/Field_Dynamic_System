@@ -78,8 +78,8 @@ def test_honest_dynamic_benchmark():
     # START THE CLOCK (Total Wall Time)
     T0_TOTAL = time.time()
 
-    DIMENSIONS = 4
-    STEPS = 50
+    DIMENSIONS = 15
+    STEPS = 5
 
     # 1. INITIALIZATION
     seed_tuple = tuple([0] * DIMENSIONS)

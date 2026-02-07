@@ -39,7 +39,7 @@ class TestClassicalOperator:
         """TC2: If logic provided, it calculates the next step (Trajectory)."""
         # Setup
         start_state = VectorState((0, 0))
-        op = ClassicalOperator(transition_fn=mario_physics)
+        op = ClassicalOperator(selection_strategy=mario_physics)
 
         # Execute: Action 1 (Up)
         ctx = InteractionContext(action_id=1)
@@ -57,7 +57,7 @@ class TestClassicalOperator:
         """
         # Initialize
         current_state = VectorState((0, 0))
-        op = ClassicalOperator(transition_fn=mario_physics)
+        op = ClassicalOperator(selection_strategy=mario_physics)
 
         inputs = [4, 4, 1]  # Right, Right, Up
         history = [current_state.values]
