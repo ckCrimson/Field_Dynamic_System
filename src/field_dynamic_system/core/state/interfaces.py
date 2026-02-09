@@ -245,6 +245,12 @@ class IDiscreteStateSpace(StateSpace, Protocol):
         """
         pass
 
+    @property
+    def raw_states(self) -> List[Any]:
+        """Returns the raw  list of raw state."""
+        pass
+
+
 @runtime_checkable
 class IStateSpaceTransformation(Protocol):
     """

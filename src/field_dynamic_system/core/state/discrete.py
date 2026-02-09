@@ -157,6 +157,24 @@ class AbstractDiscreteStateSpace(IDiscreteStateSpace):
         except (TypeError, ValueError):
             return results
 
+    @property
+    def raw_states(self) -> jnp.ndarray:
+        """
+        Returns the raw data backing the state space as a JAX array.
+        Optimized for Lazy spaces to return the original buffer directly,
+        bypassing object instantiation.
+        """
+        # 1. Fast Path: Lazy Proxy
+        # If we are using a proxy, we have the raw array sitting right there.
+        # We access '.raw' to skip the wrapper function.
+        if hasattr(self._idx_to_state, 'raw'):
+            return jnp.array(self._idx_to_state.raw)
+
+        # 2. Slow Path: Extraction from Objects
+        # If initialized with objects, we must extract numerical values.
+        # We reuse the logic in get_matrix() but ensure JAX return type.
+        return jnp.array(self.get_matrix())
+
     # --- Set Ops ---
     def create_subset(self, states: List[Any]) -> 'AbstractDiscreteStateSpace':
         return self.__class__(states)
