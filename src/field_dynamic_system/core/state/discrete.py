@@ -13,27 +13,28 @@ from .state import VectorState
 
 
 # --- 1. THE LAZY PROXY ---
+# --- 1. LAZY PROXY ---
 class LazyStateProxy:
     """
-    Universal Proxy: Wraps any raw collection (Numpy/List) and creates
-    objects only when accessed. Exposed .raw_data for Topology speed.
+    Universal Proxy: Wraps raw data + optional IDs.
     """
-
-    def __init__(self, raw_collection: Sequence[Any], wrapper_func: Callable[[Any], Any]):
+    def __init__(self, raw_collection: Sequence[Any], wrapper_func: Callable[[Any], Any], ids: Optional[Sequence[int]] = None):
         self.raw_data = raw_collection
         self._wrapper = wrapper_func
+        self._ids = ids
 
     def __len__(self):
         return len(self.raw_data)
 
     def __getitem__(self, idx):
-        return self._wrapper(self.raw_data[idx])
+        val = self.raw_data[idx]
+        if self._ids is not None:
+            return self._wrapper(val, id=self._ids[idx])
+        return self._wrapper(val)
 
     def __iter__(self):
         for i in range(len(self)):
             yield self[i]
-
-
 # --- 2. ABSTRACT BASE (FIXED) ---
 class AbstractDiscreteStateSpace(IDiscreteStateSpace):
     """
@@ -60,15 +61,6 @@ class AbstractDiscreteStateSpace(IDiscreteStateSpace):
     def _post_init(self):
         pass
 
-    # [THE FACTORY]
-    @classmethod
-    def from_raw_data(cls, raw_data: Sequence[Any], wrapper: Callable[[Any], Any], **kwargs):
-        obj = cls.__new__(cls)
-        obj._idx_to_state = LazyStateProxy(raw_data, wrapper)
-        obj._state_to_idx = {}  # Empty for speed
-        obj._encoder = kwargs.get('encoder')
-        obj._raw_init_hook(raw_data, **kwargs)
-        return obj
 
     def _raw_init_hook(self, raw_data, **kwargs):
         pass
@@ -157,23 +149,7 @@ class AbstractDiscreteStateSpace(IDiscreteStateSpace):
         except (TypeError, ValueError):
             return results
 
-    @property
-    def raw_states(self) -> jnp.ndarray:
-        """
-        Returns the raw data backing the state space as a JAX array.
-        Optimized for Lazy spaces to return the original buffer directly,
-        bypassing object instantiation.
-        """
-        # 1. Fast Path: Lazy Proxy
-        # If we are using a proxy, we have the raw array sitting right there.
-        # We access '.raw' to skip the wrapper function.
-        if hasattr(self._idx_to_state, 'raw'):
-            return jnp.array(self._idx_to_state.raw_data)
 
-        # 2. Slow Path: Extraction from Objects
-        # If initialized with objects, we must extract numerical values.
-        # We reuse the logic in get_matrix() but ensure JAX return type.
-        return jnp.array(self.get_matrix())
 
     # --- Set Ops ---
     def create_subset(self, states: List[Any]) -> 'AbstractDiscreteStateSpace':
@@ -242,6 +218,103 @@ class AbstractDiscreteStateSpace(IDiscreteStateSpace):
 
         # 3. Lookup
         return self._idx_to_state[i]
+
+    @classmethod
+    def from_raw_data(cls, raw_data: Sequence[Any], wrapper: Callable[[Any], Any], ids: Optional[Sequence[int]] = None,
+                      **kwargs):
+        obj = cls.__new__(cls)
+        obj._idx_to_state = LazyStateProxy(raw_data, wrapper, ids)
+        obj._state_to_idx = {}
+        obj._encoder = kwargs.get('encoder')
+        obj._raw_init_hook(raw_data, **kwargs)
+        return obj
+
+    # --- RAW LOOKUPS (Optimization: Lazy Raw Map) ---
+
+    def _ensure_raw_map(self):
+        """
+        Lazily builds a {RawValue -> Index} map.
+        This enables O(1) lookups for raw strings/numbers without object overhead.
+        """
+        # Check if map already exists
+        if hasattr(self, '_raw_map') and self._raw_map is not None:
+            return
+
+        # Build Map: Iterate raw buffer directly
+        # This is fast because we deal with primitives (str/int), not State objects.
+        try:
+            # We assume raw_states returns a Numpy/JAX array
+            raw = self.raw_states
+            # Convert to standard Python types for Dictionary keys (Numpy scalars can be slow as keys)
+            if hasattr(raw, 'tolist'):
+                raw = raw.tolist()
+
+            self._raw_map = {val: i for i, val in enumerate(raw)}
+        except Exception:
+            # Fallback for complex types (like Vectors) that aren't hashable directly
+            # For Vectors, we'd need tuple conversion, handled by specific subclasses
+            self._raw_map = {}
+
+    def contains_raw(self, raw_val: Any) -> bool:
+        """
+        O(1) Check if raw value exists.
+        """
+        # 1. Try Lazy Map (Fastest)
+        self._ensure_raw_map()
+        if self._raw_map:
+            return raw_val in self._raw_map
+
+        # 2. Fallback to Array Scan (Slow, but safe)
+        # (This was the logic giving you 0.0x speedup)
+        return raw_val in self.raw_states
+
+    def get_raw_index(self, raw_val: Any) -> int:
+        """
+        O(1) Get Index from Raw Value.
+        """
+        self._ensure_raw_map()
+        return self._raw_map.get(raw_val, -1)
+
+    def _build_raw_map(self):
+        """
+        Builds {RawValue -> Int} map.
+        Much lighter than {Object -> Int}.
+        """
+        # We access the raw buffer directly
+        raw = self.raw_states
+        # Create map from raw primitives (int/str) to index
+        # This is fast because we don't inflate Objects.
+        self._raw_map = {val: i for i, val in enumerate(raw)}
+
+    def _decode_index(self, raw_val):
+        """Override this in subclasses for math-based lookup."""
+        return None
+
+
+
+    # --- RAW SET OPERATIONS (The Speed Boost) ---
+
+    @property
+    def raw_states(self) -> np.ndarray:
+        if isinstance(self._idx_to_state, LazyStateProxy):
+            return np.array(self._idx_to_state.raw_data)
+        return np.array(self.get_matrix())  # Fallback
+
+    # --- RAW SET OPERATIONS (1D Generic) ---
+    def raw_union(self, other_space):
+        # np.union1d works for Strings and Scalars
+        res = np.union1d(self.raw_states, other_space.raw_states)
+        return self.from_raw_data(res, self._get_wrapper_cls())
+
+    def raw_intersection(self, other_space):
+        res = np.intersect1d(self.raw_states, other_space.raw_states)
+        return self.from_raw_data(res, self._get_wrapper_cls())
+
+    def _get_wrapper_cls(self):
+        if isinstance(self._idx_to_state, LazyStateProxy):
+            return self._idx_to_state._wrapper
+        return type(self._idx_to_state[0]) if self._idx_to_state else None
+
 
 # ----3. Lazy Discrete State Space -----------#
 # --- HELPER: Fast Row-wise Set Operations ---
@@ -423,6 +496,22 @@ class LazyDiscreteStateSpace(IDiscreteStateSpace):
         return cls(children[0], aux[0])
 
 # --- 4. VECTOR STATE SPACE  ---
+def _view_as_void(arr):
+    """Tricks NumPy into treating rows as single elements."""
+    arr = np.ascontiguousarray(arr)
+    return arr.view(np.dtype((np.void, arr.dtype.itemsize * arr.shape[1])))
+
+def _unique_rows(arr):
+    if arr.size == 0: return arr
+    _, idx = np.unique(_view_as_void(arr), return_index=True)
+    return arr[np.sort(idx)]
+
+def _intersect_rows(A, B):
+    if A.size == 0 or B.size == 0: return np.empty((0, A.shape[1]), dtype=A.dtype)
+    voidA, voidB = _view_as_void(A), _view_as_void(B)
+    common = np.intersect1d(voidA, voidB)
+    return common.view(A.dtype).reshape(-1, A.shape[1])
+
 class VectorStateSpace(AbstractDiscreteStateSpace):
     """
     Dynamic Vector Space with JAX broadcasting support.
@@ -439,15 +528,36 @@ class VectorStateSpace(AbstractDiscreteStateSpace):
         super().__init__(vectors, encoder=VectorEncoding(dim))
 
     def _raw_init_hook(self, raw_data, **kwargs):
+        # [FIX 2] Handle 1D vs 2D raw data
+        # If raw_data came from union1d (Bad), it would be 1D.
+        # But we fixed raw_union below, so raw_data should be 2D here.
+
+        if hasattr(raw_data, 'ndim') and raw_data.ndim == 1:
+            # Emergency reshape if single vector passed as list
+            pass
+
         self.dim = kwargs.get('dim', raw_data.shape[1])
         self._matrix = jnp.array(raw_data, dtype=np.float32)
         if self._encoder is None:
             self._encoder = VectorEncoding(self.dim)
 
-    def _on_state_added(self, state: VectorState):
-        if len(self._idx_to_state) > self._matrix.shape[0]:
-            new_vec = jnp.array(state.values, dtype=jnp.float32).reshape(1, self.dim)
-            self._matrix = jnp.concatenate([self._matrix, new_vec], axis=0)
+    # --- [FIX 2] OVERRIDE RAW OPS FOR 2D DATA ---
+    def raw_union(self, other):
+        """Row-wise Union."""
+        A = np.array(self._matrix)
+        B = np.array(other._matrix)
+        combined = np.vstack((A, B))
+        unique = _unique_rows(combined)
+
+        return self.from_raw_data(unique, self._get_wrapper_cls(), dim=self.dim)
+
+    def raw_intersection(self, other):
+        """Row-wise Intersection."""
+        A = np.array(self._matrix)
+        B = np.array(other._matrix)
+        common = _intersect_rows(A, B)
+
+        return self.from_raw_data(common, self._get_wrapper_cls(), dim=self.dim)
 
     # --- CRITICAL FIX: CONTAINS OVERRIDE ---
     def contains(self, state: Union[Any, Sequence[Any], jnp.ndarray]) -> Union[bool, jnp.ndarray]:
@@ -633,4 +743,41 @@ class IndexedVectorStateSpace(VectorStateSpace):
                 final_states.append(state)
 
         return self.create_subset(final_states)
+
+    def _raw_init_hook(self, raw_data, **kwargs):
+        # 1. Call Parent Hook (Sets up .dim, ._matrix)
+        super()._raw_init_hook(raw_data, **kwargs)
+
+        # 2. Setup Indexed Configuration
+        self.indexed_axes = kwargs.get('indexed_axes', (0,))
+        self.precision = kwargs.get('precision', 6)
+
+        # 3. Initialize Containers
+        self._value_to_index = {}
+        self._axis_index_map = {axis: defaultdict(list) for axis in self.indexed_axes}
+
+        # 4. Build Indices
+        # Warning: This iterates all states.
+        # For HUGE raw data, you might want to delay this (lazy indexing),
+        # but for IndexedSpace the promise is O(1) search, so we usually build eagerly.
+
+        # Optimization: We can index the _matrix directly without inflating objects!
+        self._build_indices_from_matrix(self._matrix)
+
+    def _build_indices_from_matrix(self, matrix):
+        """
+        Fast Indexing using Raw Matrix (Avoids Object Inflation).
+        """
+        for i in range(matrix.shape[0]):
+            row = matrix[i]
+            # Convert JAX/Numpy row to tuple for Dict Key
+            # We use distinct values for precise lookup
+            val_key = tuple(np.array(row).tolist())
+            self._value_to_index[val_key] = i
+
+            # Axis Indexing
+            for axis in self.indexed_axes:
+                if axis < len(row):
+                    key = round(float(row[axis]), self.precision)
+                    self._axis_index_map[axis][key].append(i)
 

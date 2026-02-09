@@ -1,4 +1,4 @@
-from typing import Callable, Type, Any, List, Union
+from typing import Callable, Type, Any, List, Union, Sequence
 import jax.numpy as jnp
 import numpy as np
 
@@ -30,6 +30,25 @@ class AbstractStateTransformation(DiscreteStateTransformation):
         # Use the generic map (Python Loop)
         raw_results = space.map(self.operation)
         return self.target_space_class(raw_results)
+
+    def transform_raw(self, raw_states: Sequence[Any]) -> Sequence[Any]:
+        """
+        Pure Data Transformation.
+        Input: Raw Buffer (List/Array)
+        Output: Raw Buffer (List/Array)
+
+        No Space objects involved. Just Data -> Op -> Data.
+        """
+        # 1. Apply Operation directly to the buffer
+        # We assume self.operation is vectorized or handles list comprehensions
+        # Example: lambda x: [s + "_suffix" for s in x]
+        # Example: lambda x: np.char.add(x, "_suffix")
+
+        try:
+            return self.operation(raw_states)
+        except Exception:
+            # Fallback if operation expects single items
+            return [self.operation(s) for s in raw_states]
 
 
 class VectorStateTransformation(DiscreteStateTransformation):
@@ -68,3 +87,13 @@ class VectorStateTransformation(DiscreteStateTransformation):
 
         # Fallback
         return self.target_space_class.from_raw_array(np.array(raw_matrix))
+
+    def transform_raw(self, raw_matrix: Union[np.ndarray, jnp.ndarray]) -> Union[np.ndarray, jnp.ndarray]:
+        """
+        Pure Matrix Transformation.
+        Input: (N, D) Array
+        Output: (N, D') Array
+        """
+        # 1. Apply JAX/Numpy Operation
+        # Expectation: Operation handles broadcasting
+        return self.operation(raw_matrix)
