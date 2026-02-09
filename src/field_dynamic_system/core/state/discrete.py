@@ -168,7 +168,7 @@ class AbstractDiscreteStateSpace(IDiscreteStateSpace):
         # If we are using a proxy, we have the raw array sitting right there.
         # We access '.raw' to skip the wrapper function.
         if hasattr(self._idx_to_state, 'raw'):
-            return jnp.array(self._idx_to_state.raw)
+            return jnp.array(self._idx_to_state.raw_data)
 
         # 2. Slow Path: Extraction from Objects
         # If initialized with objects, we must extract numerical values.
