@@ -4,7 +4,7 @@ Implements Constructive Solid Geometry (CSG) for physical manifolds.
 """
 import dataclasses
 from abc import ABC, abstractmethod
-from typing import Union, Sequence, Any, Optional
+from typing import Union, Sequence, Any, Optional, Type
 from enum import Enum
 from dataclasses import dataclass
 import jax.numpy as jnp
@@ -13,6 +13,7 @@ from jax._src.tree_util import register_pytree_node
 # Assuming these imports are correct based on your previous files
 from .interfaces import StateSpace, StateEncoder, IContinuousStateSpace
 from .encoding import IdentityEncoder
+
 
 # --- 1. Operation Types ---
 class CSGOp(Enum):
@@ -43,6 +44,8 @@ class ContinuousStateSpace(IContinuousStateSpace, ABC):
         Crucial for physics stability (Constraint Enforcement).
         """
         ...
+
+
 
     def _resolve_to_array(self, state: Union[Any, Sequence[Any], jnp.ndarray]) -> jnp.ndarray:
         if isinstance(state, jnp.ndarray):

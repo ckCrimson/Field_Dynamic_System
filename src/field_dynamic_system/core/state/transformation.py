@@ -1,19 +1,33 @@
-from typing import Callable, Type, Any, List, Union, Sequence
+from typing import Callable, Any, Type, Sequence, Optional, Union
 import jax.numpy as jnp
 import numpy as np
 
-from .interfaces import IDiscreteStateSpace, State
-from .discrete import VectorStateSpace, AbstractDiscreteStateSpace, VectorState
+# Adjust imports to match your project structure
+from src.field_dynamic_system.core.state.interfaces import IDiscreteStateSpace, IStateSpaceTransformation
+from src.field_dynamic_system.core.state.discrete import VectorStateSpace, VectorState, AbstractDiscreteStateSpace
 
 
-class DiscreteStateTransformation:
-    """Base class for transformations."""
+# --- 1. BASE CLASS ---
+class DiscreteStateTransformation(IStateSpaceTransformation):
+    """
+    Base class for state transformations.
+    """
 
     def __init__(self,
-                 operation: Callable[[State], Any],
-                 target_space_class: Type[IDiscreteStateSpace]):
+                 operation: Callable[[Any], Any],
+                 target_space_class: Type[IDiscreteStateSpace],
+                 raw_operation: Optional[Callable[[Any], Any]] = None):
+        """
+        Args:
+            operation: Function to apply to State Objects.
+            target_space_class: The class of the output space.
+            raw_operation: Optional function to apply to Raw Data directly.
+                           If None, defaults to 'operation'.
+        """
         self.operation = operation
         self.target_space_class = target_space_class
+        # Backward Compatibility: Default to operation if raw is missing
+        self.raw_operation = raw_operation if raw_operation else operation
 
     def transform(self, space: IDiscreteStateSpace) -> IDiscreteStateSpace:
         # Fallback implementation
@@ -21,79 +35,101 @@ class DiscreteStateTransformation:
         return self.target_space_class(raw_results)
 
 
+# --- 2. ABSTRACT TRANSFORMATION (Strings, Tuples, Dicts) ---
 class AbstractStateTransformation(DiscreteStateTransformation):
     """
     Specialized for Abstract States (Strings/Dicts).
     """
 
     def transform(self, space: IDiscreteStateSpace) -> IDiscreteStateSpace:
-        # Use the generic map (Python Loop)
+        # 1. FAST PATH: Check for raw states availability
+        # OPTIMIZATION: Try to grab the list directly from the proxy to avoid Numpy copy overhead
+        raw_source = None
+        if hasattr(space, '_idx_to_state') and hasattr(space._idx_to_state, 'raw_data'):
+            raw_source = space._idx_to_state.raw_data
+        elif hasattr(space, 'raw_states'):
+            raw_source = space.raw_states
+
+        if raw_source is not None:
+            # Use the raw_operation on the raw buffer
+            raw_output = self.transform_raw(raw_source)
+
+            # Reconstruct using Factory
+            # Try to infer wrapper from the space
+            wrapper_cls = getattr(space, '_get_wrapper_cls', lambda: None)()
+            if not wrapper_cls and space.states:
+                wrapper_cls = type(space.states[0])
+
+            if hasattr(self.target_space_class, 'from_raw_data'):
+                return self.target_space_class.from_raw_data(
+                    raw_data=raw_output,
+                    wrapper=wrapper_cls
+                )
+
+        # 2. SLOW PATH: Use generic map (Python Loop) on Objects
         raw_results = space.map(self.operation)
         return self.target_space_class(raw_results)
 
     def transform_raw(self, raw_states: Sequence[Any]) -> Sequence[Any]:
         """
         Pure Data Transformation.
-        Input: Raw Buffer (List/Array)
-        Output: Raw Buffer (List/Array)
-
-        No Space objects involved. Just Data -> Op -> Data.
         """
-        # 1. Apply Operation directly to the buffer
-        # We assume self.operation is vectorized or handles list comprehensions
-        # Example: lambda x: [s + "_suffix" for s in x]
-        # Example: lambda x: np.char.add(x, "_suffix")
+        # --- CRITICAL FIX ---
+        # We REMOVED the check for 'isinstance(np.ndarray)'.
+        # For Abstract data, 'array[0]' is ambiguous (Row 0 vs Element 0).
+        # We MUST force iteration to ensure the operation maps over every item.
 
-        try:
-            return self.operation(raw_states)
-        except Exception:
-            # Fallback if operation expects single items
-            return [self.operation(s) for s in raw_states]
+        return [self.raw_operation(s) for s in raw_states]
 
 
+# --- 3. VECTOR TRANSFORMATION (Floats, Ints) ---
 class VectorStateTransformation(DiscreteStateTransformation):
     """
     High-Performance Transformation for Vectors.
-    Leverages JAX vmap + Raw Factory for 1000x speedups.
+    Leverages JAX vmap + Raw Factory.
     """
 
     def __init__(self,
                  operation: Callable[[Any], Any],
-                 target_space_class: Type[IDiscreteStateSpace] = VectorStateSpace):
-        # Pass correctly to parent
-        super().__init__(operation, target_space_class)
+                 target_space_class: Type[IDiscreteStateSpace] = VectorStateSpace,
+                 raw_operation: Optional[Callable[[Any], Any]] = None):
+
+        # Pass raw_operation correctly to parent
+        super().__init__(operation, target_space_class, raw_operation)
 
     def transform(self, space: VectorStateSpace) -> VectorStateSpace:
         """
         Executes transformation entirely in JAX/Numpy memory where possible.
         """
-        # 1. Run the Math (Fast JAX Map)
-        raw_matrix = space.map(self.operation)
+        # 1. Run the Math (Fast JAX Map via raw_operation)
+        if hasattr(space, 'get_matrix'):
+            raw_matrix = space.get_matrix()
+            raw_output = self.transform_raw(raw_matrix)
+        else:
+            return super().transform(space)
 
         # 2. Check if optimization succeeded (returned Array vs List)
-        if isinstance(raw_matrix, list) or raw_matrix.dtype == object:
-            return self.target_space_class(raw_matrix)
+        if isinstance(raw_output, list) or (hasattr(raw_output, 'dtype') and raw_output.dtype == object):
+            return self.target_space_class(raw_output)
 
         # 3. FAST PATH: Create Space from Raw Data
-        dim = raw_matrix.shape[-1]
+        dim = raw_output.shape[-1]
 
         # Use the factory if available
         if hasattr(self.target_space_class, 'from_raw_data'):
             return self.target_space_class.from_raw_data(
-                raw_matrix,
+                raw_data=raw_output,
                 wrapper=lambda x: VectorState(tuple(x.tolist())),
                 dim=dim
             )
 
         # Fallback
-        return self.target_space_class.from_raw_array(np.array(raw_matrix))
+        return self.target_space_class.from_raw_array(np.array(raw_output))
 
     def transform_raw(self, raw_matrix: Union[np.ndarray, jnp.ndarray]) -> Union[np.ndarray, jnp.ndarray]:
         """
         Pure Matrix Transformation.
-        Input: (N, D) Array
-        Output: (N, D') Array
+        Uses self.raw_operation.
         """
-        # 1. Apply JAX/Numpy Operation
         # Expectation: Operation handles broadcasting
-        return self.operation(raw_matrix)
+        return self.raw_operation(raw_matrix)

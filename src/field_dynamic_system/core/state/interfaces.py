@@ -1,10 +1,12 @@
 from abc import abstractmethod
-from typing import Protocol, Any, runtime_checkable, List
+from typing import Protocol, Any, runtime_checkable, List, Type
 from typing import Protocol, Union, Sequence, runtime_checkable, Any
 import jax.numpy as jnp
 
 
 import jax.tree_util
+
+
 
 # --- 1. Base State Marker ---
 @runtime_checkable
@@ -79,6 +81,10 @@ class StateSpace(Protocol):
         """Logic Operation: AND"""
         ...
 
+    @property
+    def state_class(self) -> Type:
+        pass
+
 
 @runtime_checkable
 class IContinuousStateSpace(StateSpace, Protocol):
@@ -116,6 +122,9 @@ class IContinuousStateSpace(StateSpace, Protocol):
 
         # Case B: Python Object(s) -> Use our smart Encoder
         return self.encoding.encode(state)
+
+    def state_class(self) -> Type:
+        pass
 
     # --- 2. Abstract Logic ---
     @abstractmethod

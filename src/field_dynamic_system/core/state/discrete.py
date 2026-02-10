@@ -1,6 +1,6 @@
 from dataclasses import dataclass
 from collections import defaultdict
-from typing import Set, List, Union, Sequence, Any, Optional, Callable
+from typing import Set, List, Union, Sequence, Any, Optional, Callable, Type
 
 import jax.numpy as jnp
 import jax
@@ -70,6 +70,24 @@ class AbstractDiscreteStateSpace(IDiscreteStateSpace):
     @property
     def num_states(self) -> int:
         return len(self._idx_to_state)
+
+    @property
+    def state_class(self) -> Type:
+        """
+        Returns the class used to wrap raw data into State Objects.
+        Used by Transformations to reconstruct standard spaces.
+        """
+        # 1. If Lazy Proxy exists, it holds the wrapper reference
+        if hasattr(self._idx_to_state, '_wrapper'):
+            return self._idx_to_state._wrapper
+
+        # 2. If objects exist, inspect the first one
+        if self._idx_to_state and len(self._idx_to_state) > 0:
+            return type(self._idx_to_state[0])
+
+        # 3. Default Fallback (Import locally to avoid circular deps if needed)
+        from src.field_dynamic_system.core.state import AbstractState
+        return AbstractState
 
     @property
     def states(self) -> List[Any]:
@@ -624,6 +642,11 @@ class VectorStateSpace(AbstractDiscreteStateSpace):
     # --- Pytree ---
     def _tree_flatten(self):
         return (self._matrix,), (self._idx_to_state, self.dim, self._encoder)
+
+    @property
+    def state_class(self) -> Type:
+        from src.field_dynamic_system.core.state import VectorState
+        return VectorState
 
     @classmethod
     def _tree_unflatten(cls, aux, children):
