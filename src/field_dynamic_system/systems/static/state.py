@@ -1,178 +1,116 @@
-from abc import ABC, abstractmethod
-from typing import Any, Optional, Type, List, Union
-import jax.numpy as jnp
+from typing import Any, Optional, Union, Sequence, Type
 import numpy as np
 
-# Core Interfaces
-from src.field_dynamic_system.core.state.interfaces import StateSpace, IDiscreteStateSpace
-from src.field_dynamic_system.core.state.discrete import LazyDiscreteStateSpace
+# Use the Generic Interface
+from src.field_dynamic_system.core.state.interfaces import StateSpace
 
 
-# =========================================================
-# 1. ABSTRACT BASE: StaticStateSystem
-# =========================================================
-
-class StaticStateSystem(ABC):
+class StaticStateSystem:
     """
-    Base Snapshot System.
-    Stores mandatory initial state and optional state space.
-    """
-
-    def __init__(self, initial_state: Any, state_space: Optional[StateSpace] = None):
-        # We store the object reference as requested
-        self._state_obj = initial_state
-        self._space_ref = state_space
-
-        # Validation: Ensure state object has .value attribute
-        if not hasattr(initial_state, 'value'):
-            # In strict mode raise error, but for flexibility we might allow primitives
-            # assuming the primitive IS the value.
-            pass
-
-    @property
-    def state_space(self) -> Optional[StateSpace]:
-        return self._space_ref
-
-    @abstractmethod
-    def get_state(self) -> Any:
-        """Returns the high-level State Object."""
-        pass
-
-    @abstractmethod
-    def get_raw_state(self) -> Any:
-        """Returns the raw value of the initial state."""
-        pass
-
-    @abstractmethod
-    def get_raw_data(self) -> List[Any]:
-        """Returns [initial_state_raw_value, Any (context/space data)]"""
-        pass
-
-    @classmethod
-    @abstractmethod
-    def from_raw_data(cls,
-                      initial_state_raw_value: Any,
-                      **kwargs) -> 'StaticStateSystem':
-        """Factory from raw values."""
-        pass
-
-
-# =========================================================
-# 2. CONCRETE: DiscreteStaticStateSystem
-# =========================================================
-
-class DiscreteStaticStateSystem(StaticStateSystem):
-    """
-    Discrete Implementation.
-    Stores fast arrays for IDs and Raw State Values.
+    A System that holds the Initial Configuration of N entities.
     """
 
     def __init__(self,
                  initial_state: Any,
-                 state_space: Optional[IDiscreteStateSpace] = None):
-
-        super().__init__(initial_state, state_space)
-
-        # 1. Extract Initial State Raw Value
-        if hasattr(initial_state, 'value'):
-            self._raw_state_val = initial_state.value
-        else:
-            self._raw_state_val = initial_state  # Fallback for primitives
-
-        # 2. Fast Arrays Storage (Initialize Empty)
-        self._all_raw_states = None
-        self._all_ids = None
-
-        # 3. Extract Data from Space (If provided)
-        if state_space is not None:
-            # Assumption: state_space has methods/properties to access raw data
-            # We fetch raw states and IDs to store in fast arrays
-
-            # Helper to extract raw matrix (N, D)
-            if hasattr(state_space, 'get_matrix'):
-                self._all_raw_states = jnp.array(state_space.get_matrix())
-            elif hasattr(state_space, 'raw_states'):
-                self._all_raw_states = jnp.array(state_space.raw_states)
-
-            # Helper to extract IDs (0..N)
-            # Usually implied by index in the array, but we make it explicit
-            if self._all_raw_states is not None:
-                self._all_ids = jnp.arange(len(self._all_raw_states))
-
-        # Store class reference for reconstruction
-        self._state_cls = type(initial_state)
-        # Default space class
-        self._space_cls = LazyDiscreteStateSpace
-
-        # --- FACTORY ---
+                 state_space: Optional[StateSpace] = None):
+        self.state_space = state_space
+        self.initial_state = initial_state
+        self._raw_configuration = self._process_initial_state(initial_state)
 
     @classmethod
     def from_raw_data(cls,
-                      initial_state_raw_value: Any,
-                      state_class: Type,
-                      list_of_raw_states: List[Any] = None,
-                      state_space_class: Type = LazyDiscreteStateSpace) -> 'DiscreteStaticStateSystem':
+                      raw_initial_state: Union[Any, np.ndarray],
+                      state_space: StateSpace,
+                      num_entities: Optional[int] = None,
+                      state_class: Optional[Type] = None):
+        """
+        Factory for Raw Data.
+        Args:
+            num_entities: N (Number of entities). Essential for broadcasting single values.
+        """
+        raise NotImplementedError
 
-        # 1. Bypass Init
+    def _process_initial_state(self, initial_state: Any) -> Any:
+        raise NotImplementedError
+
+    def get_state(self, entity_id: int = 0) -> Any:
+        if hasattr(self.initial_state, '__getitem__') and hasattr(self.initial_state, '__len__') and not isinstance(
+                self.initial_state, str):
+            return self.initial_state[entity_id]
+        return self.initial_state
+
+    def get_raw_state(self, entity_id: int = -1) -> Any:
+        # If -1, return the whole configuration matrix
+        if entity_id == -1:
+            return self._raw_configuration
+
+        if hasattr(self._raw_configuration, '__getitem__'):
+            return self._raw_configuration[entity_id]
+        return self._raw_configuration
+
+
+class DiscreteStaticStateSystem(StaticStateSystem):
+    """
+    Implementation for Discrete States (Abstract Strings or Discrete Vectors).
+    """
+
+    def _process_initial_state(self, initial_state: Any) -> np.ndarray:
+        if isinstance(initial_state, (list, tuple)) and not isinstance(initial_state, str):
+            return np.array([s.values for s in initial_state])
+        if hasattr(initial_state, 'values'):
+            return initial_state.values
+        return initial_state
+
+    @classmethod
+    def from_raw_data(cls,
+                      raw_initial_state: Union[Any, np.ndarray],
+                      state_space: StateSpace,
+                      num_entities: Optional[int] = None,  # <--- OPTIONAL
+                      state_class: Optional[Type] = None):
+        """
+        Smart Factory:
+        1. If num_entities is MISSING -> Infers N from input array length.
+        2. If num_entities is PROVIDED -> Broadcasts single value to N.
+        """
         instance = cls.__new__(cls)
+        instance.state_space = state_space
 
-        # 2. Assign Initial State Data
-        instance._raw_state_val = initial_state_raw_value
-        instance._state_cls = state_class
+        # 1. Standardize Input to Numpy Array
+        # Copy=False allows us to use existing arrays without overhead
+        data = np.array(raw_initial_state, copy=False)
 
-        # Inflate the initial state object immediately (as per "assign the initial_state variable")
-        # We assume constructor takes value as arg
-        instance._state_obj = state_class(initial_state_raw_value)
+        # 2. Logic: Inference vs Broadcasting
 
-        # 3. Store Raw Lists in Fast Arrays
-        instance._all_raw_states = None
-        instance._all_ids = None
+        # CASE A: User provided N (Potentially Broadcasting)
+        if num_entities is not None:
+            # Check if input matches N. If not, Broadcast.
+            # Heuristic: If first dim != N, assume it's a single state to broadcast.
+            if data.shape[0] != num_entities:
+                # Tile the single state N times
+                # Handle scalar vs vector input
+                if data.ndim == 0:  # Scalar (e.g. 5)
+                    instance._raw_configuration = np.full((num_entities,), data)
+                elif data.ndim == 1:  # Vector (e.g. [0,0,0])
+                    instance._raw_configuration = np.tile(data, (num_entities, 1))
+                else:
+                    # Only tile if strictly necessary (rare for higher dims)
+                    instance._raw_configuration = np.tile(data, (num_entities,) + (1,) * (data.ndim - 1))
+            else:
+                # Already N items
+                instance._raw_configuration = data
 
-        if list_of_raw_states is not None:
-            # Convert list to JAX Array
-            raw_arr = jnp.array(list_of_raw_states)
-            if raw_arr.ndim == 1: raw_arr = raw_arr.reshape(-1, 1)
+        # CASE B: User did NOT provide N (Inference)
+        else:
+            # We assume the input IS the full configuration
+            # N = length of the array
+            if data.ndim == 0:
+                # Edge Case: Passed a single scalar without N.
+                # e.g. from_raw_data(5). Is it 1 agent with value 5? Yes.
+                instance._raw_configuration = data.reshape(1)
+            else:
+                instance._raw_configuration = data
 
-            instance._all_raw_states = raw_arr
-            instance._all_ids = jnp.arange(len(raw_arr))  # 0 to N-1
-
-        # 4. Set Space Class Reference (Lazy default or User provided)
-        instance._space_cls = state_space_class
-        instance._space_ref = None  # Lazy, created in get_space()
+        # Store virtual initial state
+        instance.initial_state = raw_initial_state
 
         return instance
-
-    # --- GETTERS ---
-
-    def get_state(self) -> Any:
-        return self._state_obj
-
-    def get_raw_state(self) -> Any:
-        return self._raw_state_val
-
-    def get_raw_data(self) -> List[Any]:
-        # Returns [initial_state_raw_value, all_raw_states_array]
-        return [self._raw_state_val, self._all_raw_states]
-
-    @property
-    def state_space(self) -> StateSpace:
-        """
-        Returns state space.
-        By default returns a LazyDiscreteStateSpace constructed from stored raw data.
-        Can be overridden by user to return custom class.
-        """
-        # If we already have a reference (from __init__), return it
-        if self._space_ref is not None:
-            return self._space_ref
-
-        # If we have raw data, construct the Lazy Space on the fly
-        if self._all_raw_states is not None:
-            # Create instance of _space_cls (Default LazyDiscreteStateSpace)
-            # Signature: (raw_data, wrapper_class)
-            self._space_ref = self._space_cls(
-                raw_data=self._all_raw_states,
-                wrapper_class=self._state_cls
-            )
-            return self._space_ref
-
-        return None

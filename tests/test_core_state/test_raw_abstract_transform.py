@@ -1,12 +1,8 @@
 import time
 import pytest
-import numpy as np
-from typing import Any, Sequence, Callable, Type
-
-from src.field_dynamic_system.core.state.discrete import AbstractDiscreteStateSpace, LazyStateProxy
+from src.field_dynamic_system.core.state.discrete import AbstractDiscreteStateSpace
 from src.field_dynamic_system.core.state import AbstractState
-from src.field_dynamic_system.core.state.transformation import DiscreteStateTransformation, AbstractStateTransformation
-from src.field_dynamic_system.core.state.interfaces import IDiscreteStateSpace
+from src.field_dynamic_system.core.state.transformation import AbstractStateTransformation
 
 
 def test_raw_abstract_transform_path():
@@ -15,12 +11,12 @@ def test_raw_abstract_transform_path():
     # 1. SETUP DATA
     N = 100_000
     print(f"Generating {N:,} raw tuple states...")
+
+    # We have the raw list right here!
     raw_data = [(f"Group_{i % 10}", i) for i in range(N)]
 
     # 2. DEFINE OPERATIONS
-    # Op for Objects (Path A)
     op_obj = lambda x: x.value[0]
-    # Op for Raw Data (Path B)
     op_raw = lambda x: x[0]
 
     transformer = AbstractStateTransformation(
@@ -30,40 +26,31 @@ def test_raw_abstract_transform_path():
     )
 
     # -------------------------------------------------------
-    # PATH A: The "Old Slow Way" (Simulated)
+    # PATH A: The Object Way (Baseline)
     # -------------------------------------------------------
-    print("\n[Path A] Standard Object Map + Init")
-
-    # Init Input Space
+    print("\n[Path A] Standard Object Map")
+    # We must create the space to simulate object overhead
     input_space = AbstractDiscreteStateSpace.from_raw_data(raw_data, AbstractState)
 
     t0 = time.time()
-
-    # FORCE SLOW PATH: We manually map objects and use standard constructor
-    raw_results_obj = input_space.map(op_obj)  # Iterates 100k objects
-    output_space_obj = AbstractDiscreteStateSpace(raw_results_obj)  # Sorts + Unique-ifies
-
+    # Simulate the work: Iterate objects -> Extract Value -> Create New Space
+    raw_results_obj = input_space.map(op_obj)
+    output_space_obj = AbstractDiscreteStateSpace(raw_results_obj)
     t_obj = time.time() - t0
     print(f"  - Time: {t_obj:.4f}s")
 
     # -------------------------------------------------------
-    # PATH B: The "New Fast Way" (Raw Pipe)
+    # PATH B: The Raw Way (Direct List)
     # -------------------------------------------------------
-    print("\n[Path B] Raw Pipe + Factory")
+    print("\n[Path B] Direct Raw Transform")
     t0 = time.time()
 
-    # 1. GET RAW SOURCE (Zero Copy)
-    # CRITICAL FIX: We grab the raw LIST directly.
-    # Do NOT call .raw_states, because that triggers an expensive np.array() conversion.
-    if isinstance(input_space._idx_to_state, LazyStateProxy):
-        raw_source = input_space._idx_to_state.raw_data
-    else:
-        raw_source = input_space.raw_states
+    # SIMPLE: Just pass the raw list we already have!
+    # No .raw_states, no accessors, no hidden copies.
+    # Logic: List -> List
+    raw_results_raw = transformer.transform_raw(raw_data)
 
-    # 2. Raw Transform (Iterates List -> Returns List)
-    raw_results_raw = transformer.transform_raw(raw_source)
-
-    # 3. Factory Create (Zero Copy)
+    # Factory Create (Wrap the result)
     output_space_raw = AbstractDiscreteStateSpace.from_raw_data(
         raw_data=raw_results_raw,
         wrapper=AbstractState
@@ -75,29 +62,15 @@ def test_raw_abstract_transform_path():
     # -------------------------------------------------------
     # VERIFICATION
     # -------------------------------------------------------
-    print("\n[Verification]")
-
-    # 1. Speedup
     speedup = t_obj / (t_raw + 1e-9)
     print(f"  - Speedup: {speedup:.1f}x")
 
-    # NOW this assertion will pass.
-    # Path B (List Comp) is faster than Path A (Object Access + Set Construction)
-    assert t_raw < t_obj, "Raw path should be faster"
+    assert t_raw < t_obj
 
-    # 2. Behavioral Difference
-    count_obj = output_space_obj.num_states
-    print(f"  - Path A Count (Unique): {count_obj}")
-
-    count_raw = output_space_raw.num_states
-    print(f"  - Path B Count (Preserved): {count_raw}")
-
-    assert count_obj == 10, "Standard Constructor should reduce to unique sets"
-    assert count_raw == N, "Raw Factory should preserve agent count"
-
-    # 3. Data Integrity
-    first_val = output_space_raw.get_state_by_id(0).value
-    assert first_val == "Group_0"
+    # Logic Checks
+    assert output_space_obj.num_states == 10  # Unique
+    assert output_space_raw.num_states == N  # Preserved
+    assert output_space_raw.get_state_by_id(0).value == "Group_0"
 
 
 if __name__ == "__main__":
