@@ -12,11 +12,10 @@ from src.field_dynamic_system.neighbor.interfaces import Topology
 
 
 class DiscreteTopology(Topology, ABC):
-    def __init__(self, state_space: IDiscreteStateSpace):
+    def __init__(self, state_space: Optional[IDiscreteStateSpace] = None):
         super().__init__(state_space)
-        self.discrete_space = state_space
+        self.discrete_space = state_space  # Can now be None
         self._adjacency_matrix = None
-
         # HYBRID STORAGE: Fast Path uses Arrays, Slow Path uses Lists
         self._raw_to_id = {}
         self._id_to_raw = []
@@ -52,6 +51,13 @@ class DiscreteTopology(Topology, ABC):
         return self._adjacency_matrix
 
     def _build_adjacency_matrix(self) -> sparse.BCOO:
+        # --- NEW GUARD ---
+        # If we have no Space, we cannot pre-build. We just sync the dynamic cache.
+        if self.discrete_space is None:
+            self._raw_sync_to_device()
+            return self._raw_jax_matrix
+
+        # If we do have a Space, proceed as normal
         if hasattr(self, 'deltas') and hasattr(self.discrete_space, 'get_matrix'):
             try:
                 return self._build_fast_vector_matrix()
@@ -179,14 +185,24 @@ class DiscreteTopology(Topology, ABC):
 
     def _raw_register_batch(self, data_batch):
         ids = []
-        if hasattr(data_batch, 'tolist'): data_batch = data_batch.tolist()
+        if hasattr(data_batch, 'tolist'):
+            data_batch = data_batch.tolist()
+
         for data in data_batch:
-            if hasattr(data, 'item') and hasattr(data, 'shape') and data.shape == (): data = data.item()
+            # 1. Handle scalar numpy items
+            if hasattr(data, 'item') and hasattr(data, 'shape') and data.shape == ():
+                data = data.item()
+            # 2. NEW FIX: Convert unhashable lists to hashable tuples
+            elif isinstance(data, list):
+                data = tuple(data)
+
+            # 3. Register in cache
             if data not in self._raw_to_id:
                 new_id = len(self._id_to_raw)
                 self._raw_to_id[data] = new_id
                 self._id_to_raw.append(data)
             ids.append(self._raw_to_id[data])
+
         return ids
 
     def _raw_ensure_expanded(self, ids):
@@ -219,9 +235,17 @@ class DiscreteTopology(Topology, ABC):
         self._raw_dirty = True
 
     def successor(self, state):
+        # --- NEW GUARD ---
+        if self.discrete_space is None:
+            raise RuntimeError("successor() requires a StateSpace. Use get_raw_successor() for Pure Raw Mode.")
         return self.discrete_space.create_subset(list(self.compute_neighbors(state)))
 
     def multi_step_successor(self, initial_state, steps):
+        # --- NEW GUARD ---
+        if self.discrete_space is None:
+            raise RuntimeError("multi_step_successor() requires a StateSpace. Use get_raw_multi_step_successor().")
+
+        # ... (rest of the method stays exactly the same)
         idx = self.discrete_space.get_index_of(initial_state)
         if idx == -1: return self.discrete_space.create_subset([])
         N = self.discrete_space.num_states

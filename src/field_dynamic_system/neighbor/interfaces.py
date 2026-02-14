@@ -1,5 +1,5 @@
 from abc import ABC, abstractmethod
-from typing import Any, Union
+from typing import Any, Union, Optional
 from ..core.state.interfaces import StateSpace
 
 class ITopology(ABC):
@@ -36,11 +36,11 @@ class Topology(ITopology):
     Base implementation holding the reference to the Global State Space.
     """
 
-    def __init__(self, state_space: StateSpace):
+    def __init__(self, state_space: Optional[StateSpace] = None):
         self._state_space = state_space
 
     @property
-    def state_space(self) -> StateSpace:
+    def state_space(self) -> Optional[StateSpace]:
         return self._state_space
 
     def predecessor(self, state: Any) -> StateSpace:

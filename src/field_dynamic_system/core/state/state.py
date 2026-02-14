@@ -50,5 +50,13 @@ class AbstractState(State):
         """
         return self.name
 
+    @property
+    def values(self) -> Any:
+        """
+        Alias: Exposes 'name' as 'value'.
+        Fixes legacy naming inconsistency without breaking changes.
+        """
+        return self.name
+
     def __hash__(self):
         return hash(self.name)
