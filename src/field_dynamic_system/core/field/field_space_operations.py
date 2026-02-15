@@ -191,248 +191,6 @@ class FieldSpaceTransformer:
 
 
 
-# class FieldSpaceComposer:
-#     """
-#     The Engine for Binary Field Operations: F3 = F1 alpha F2.
-#     """
-#
-#     @staticmethod
-#     def compose(mapper_a: FieldMapper,
-#                 mapper_b: FieldMapper,
-#                 composition_op: FieldComposition,
-#                 output_algebra: IFieldAlgebra,
-#                 override_bg_func: Optional[Callable] = None) -> FieldMapper:
-#
-#         is_a_disc = isinstance(mapper_a, DiscreteFieldMapper)
-#         is_b_disc = isinstance(mapper_b, DiscreteFieldMapper)
-#
-#         if is_a_disc and is_b_disc:
-#             return FieldSpaceComposer._compose_discrete_discrete(
-#                 mapper_a, mapper_b, composition_op, output_algebra, override_bg_func
-#             )
-#         elif not is_a_disc and not is_b_disc:
-#             return FieldSpaceComposer._compose_continuous_continuous(
-#                 mapper_a, mapper_b, composition_op, output_algebra, override_bg_func
-#             )
-#         else:
-#             return FieldSpaceComposer._compose_hybrid(
-#                 mapper_a, mapper_b, composition_op, output_algebra, override_bg_func
-#             )
-#
-#     # =========================================================
-#     # RAW KERNELS (The Engine Room)
-#     # =========================================================
-#
-#     @staticmethod
-#     def compose_aligned_raw(buffer_a: jnp.ndarray, buffer_b: jnp.ndarray, op: FieldComposition) -> jnp.ndarray:
-#         """
-#         Fast Path: Pure Tensor Operation.
-#         Use this when you KNOW indices are identical (e.g. same StateSpace).
-#         """
-#         return op.compose(buffer_a, buffer_b)
-#
-#     @staticmethod
-#     def compose_raw(ids_a: jnp.ndarray, vals_a: jnp.ndarray,
-#                     ids_b: jnp.ndarray, vals_b: jnp.ndarray,
-#                     op: FieldComposition) -> Tuple[jnp.ndarray, jnp.ndarray]:
-#         """
-#         Merges two sparse fields. Works for Infinite Grids where IDs = Coordinates.
-#         """
-#         # 1. Stack (Union)
-#         all_ids = jnp.concatenate([ids_a, ids_b], axis=0)
-#         all_vals = jnp.concatenate([vals_a, vals_b], axis=0)
-#
-#         # 2. Unique (Topology / Collision Detection)
-#         # axis=0 handles both scalar IDs and vector IDs (coordinates)
-#         unique_ids, inverse_indices = jnp.unique(all_ids, return_inverse=True, axis=0)
-#
-#         # 3. Aggregate (Algebra)
-#         out_dim = vals_a.shape[1]
-#         merged_vals = jnp.zeros((unique_ids.shape[0], out_dim), dtype=vals_a.dtype)
-#
-#         if isinstance(op, AdditionComposition):
-#             merged_vals = merged_vals.at[inverse_indices].add(all_vals)
-#         else:
-#             merged_vals = merged_vals.at[inverse_indices].add(all_vals)
-#
-#         return unique_ids, merged_vals
-#
-#         if isinstance(op, AdditionComposition):
-#             merged_vals = merged_vals.at[inverse_indices].add(all_vals)
-#         else:
-#             # Fallback/Generic: Default to Add semantics for accumulation
-#             merged_vals = merged_vals.at[inverse_indices].add(all_vals)
-#
-#         return unique_ids, merged_vals
-#
-#     # =========================================================
-#     # HELPER: Fetch Implicit Values (Vectorized)
-#     # =========================================================
-#     @staticmethod
-#     def _get_implicit_values(mapper: DiscreteFieldMapper, states: List[Any]) -> jnp.ndarray:
-#         dim = mapper.explicit_buffer.shape[1]
-#         if not states:
-#             return jnp.zeros((0, dim), dtype=mapper.explicit_buffer.dtype)
-#
-#         if mapper.background_func is None:
-#             return mapper.algebra.get_zero((len(states),))
-#
-#         try:
-#             res = mapper.background_func(states)
-#             if res.ndim == 1: res = res.reshape(len(states), -1)
-#             return res
-#         except Exception:
-#             vals = [mapper.background_func(s) for s in states]
-#             res = jnp.array(vals)
-#             if res.ndim == 1:
-#                 res = res.reshape(len(states), -1)
-#             elif res.ndim == 3:
-#                 res = res.reshape(len(states), -1)
-#             return res
-#
-#     # =========================================================
-#     # DISCRETE + DISCRETE (Object Logic)
-#     # =========================================================
-#     @staticmethod
-#     def _compose_discrete_discrete(a: DiscreteFieldMapper,
-#                                    b: DiscreteFieldMapper,
-#                                    op: FieldComposition,
-#                                    out_alg: IFieldAlgebra,
-#                                    final_bg=None):
-#         # 1. Background Logic
-#         bg_a = a.background_func
-#         bg_b = b.background_func
-#         if final_bg:
-#             new_bg = final_bg
-#         elif bg_a is None and bg_b is None:
-#             new_bg = None
-#         else:
-#             def composed_bg(s):
-#                 val_a = bg_a(s) if bg_a else a.algebra.get_zero((1,))
-#                 val_b = bg_b(s) if bg_b else b.algebra.get_zero((1,))
-#                 return op.compose(val_a, val_b)
-#
-#             new_bg = composed_bg
-#
-#         # 2. State Alignment
-#
-#         # --- FAST PATH FIX IS HERE ---
-#         if a.state_space is b.state_space:
-#             # We must use 'compose_aligned_raw' (2 args), not 'compose_raw' (5 args)
-#             new_buffer = FieldSpaceComposer.compose_aligned_raw(a.explicit_buffer, b.explicit_buffer, op)
-#             new_mask = a.mask_buffer | b.mask_buffer
-#             return DiscreteFieldMapper(a.state_space, out_alg, new_buffer, new_mask, bg_func=new_bg)
-#
-#         # SLOW PATH: Symbolic Join
-#         states_a = a.state_space.states
-#         states_b = b.state_space.states
-#
-#         # A. Union Space
-#         union_set = set(states_a).union(set(states_b))
-#         union_list_raw = list(union_set)
-#         try:
-#             new_space = a.state_space.create_subset(union_list_raw)
-#         except:
-#             new_space = type(a.state_space)(union_list_raw)
-#
-#         # B. Authoritative Order
-#         target_states = new_space.states
-#         idx_map_a = {s: i for i, s in enumerate(states_a)}
-#         idx_map_b = {s: i for i, s in enumerate(states_b)}
-#
-#         # C. Partitioning & Scatter Logic
-#         dim = a.explicit_buffer.shape[1]
-#         final_buffer = jnp.zeros((len(target_states), dim), dtype=a.explicit_buffer.dtype)
-#
-#         target_indices_common = []
-#         target_indices_only_a = []
-#         target_indices_only_b = []
-#         src_indices_a_common = []
-#         src_indices_b_common = []
-#         src_indices_a_only = []
-#         objs_only_a_implicit_b = []
-#         src_indices_b_only = []
-#         objs_only_b_implicit_a = []
-#
-#         for i, s in enumerate(target_states):
-#             in_a = s in idx_map_a
-#             in_b = s in idx_map_b
-#
-#             if in_a and in_b:
-#                 target_indices_common.append(i)
-#                 src_indices_a_common.append(idx_map_a[s])
-#                 src_indices_b_common.append(idx_map_b[s])
-#             elif in_a:
-#                 target_indices_only_a.append(i)
-#                 src_indices_a_only.append(idx_map_a[s])
-#                 objs_only_a_implicit_b.append(s)
-#             elif in_b:
-#                 target_indices_only_b.append(i)
-#                 src_indices_b_only.append(idx_map_b[s])
-#                 objs_only_b_implicit_a.append(s)
-#
-#         if target_indices_common:
-#             raw_a = a.explicit_buffer[jnp.array(src_indices_a_common)]
-#             raw_b = b.explicit_buffer[jnp.array(src_indices_b_common)]
-#             vals = op.compose(raw_a, raw_b)
-#             final_buffer = final_buffer.at[jnp.array(target_indices_common)].set(vals)
-#
-#         if target_indices_only_a:
-#             raw_a = a.explicit_buffer[jnp.array(src_indices_a_only)]
-#             raw_b_implicit = FieldSpaceComposer._get_implicit_values(b, objs_only_a_implicit_b)
-#             vals = op.compose(raw_a, raw_b_implicit)
-#             final_buffer = final_buffer.at[jnp.array(target_indices_only_a)].set(vals)
-#
-#         if target_indices_only_b:
-#             raw_b = b.explicit_buffer[jnp.array(src_indices_b_only)]
-#             raw_a_implicit = FieldSpaceComposer._get_implicit_values(a, objs_only_b_implicit_a)
-#             vals = op.compose(raw_a_implicit, raw_b)
-#             final_buffer = final_buffer.at[jnp.array(target_indices_only_b)].set(vals)
-#
-#         final_mask = jnp.ones(len(target_states), dtype=bool)
-#
-#         return DiscreteFieldMapper(
-#             new_space, out_alg,
-#             explicit_buffer=final_buffer,
-#             mask_buffer=final_mask,
-#             bg_func=new_bg
-#         )
-#
-#     # =========================================================
-#     # CONTINUOUS & HYBRID (Unchanged)
-#     # =========================================================
-#     @staticmethod
-#     def _compose_continuous_continuous(a, b, op, out_alg, final_bg=None):
-#         if final_bg:
-#             new_bg_func = final_bg
-#         else:
-#             def composed_bg(state):
-#                 return op.compose(a.background_func(state), b.background_func(state))
-#
-#             new_bg_func = composed_bg
-#
-#         keys = set(a.sparse_cache.keys()) | set(b.sparse_cache.keys())
-#         new_cache = {}
-#         for k in keys:
-#             val_a = a.sparse_cache.get(k, a.get_fields_at(k)[0].value)
-#             val_b = b.sparse_cache.get(k, b.get_fields_at(k)[0].value)
-#             new_cache[k] = op.compose(val_a, val_b)
-#
-#         return ContinuousFieldMapper(a.state_space, out_alg, bg_func=new_bg_func, sparse_cache=new_cache)
-#
-#     @staticmethod
-#     def _compose_hybrid(a, b, op, out_alg, final_bg=None):
-#         cont_mapper = a if isinstance(a, ContinuousFieldMapper) else b
-#         if final_bg:
-#             new_bg = final_bg
-#         else:
-#             def composed_bg(state):
-#                 return op.compose(a.get_fields_at(state)[0].value, b.get_fields_at(state)[0].value)
-#
-#             new_bg = composed_bg
-#         return ContinuousFieldMapper(cont_mapper.state_space, out_alg, bg_func=new_bg)
-
-
 class FieldSpaceComposer:
     """
     The Engine for Binary Field Operations: F3 = F1 [op] F2.
@@ -642,19 +400,25 @@ class FieldSpaceComposer:
         raw_vals_b = b.explicit_buffer[safe_idx_b]
 
         # --- FIX 1: Correct Background Evaluation ---
-        # We call the function directly (if it exists) instead of non-existent get_raw_batch
+        # We ask the composition operator what "empty space" should look like
 
+        # Background for A
         if a.background_func:
             bg_vals_a = a.background_func(union_list)
+        elif hasattr(op, 'get_identity'):
+            bg_vals_a = op.get_identity((N, raw_vals_a.shape[1]), dtype=raw_vals_a.dtype)
         else:
-            bg_vals_a = out_alg.get_zero((N,))
+            bg_vals_a = out_alg.get_zero((N, raw_vals_a.shape[1]))
 
+        # Background for B
         if b.background_func:
-            bg_vals_b = b.background_func(union_list)  # Corrected call
+            bg_vals_b = b.background_func(union_list)
+        elif hasattr(op, 'get_identity'):
+            bg_vals_b = op.get_identity((N, raw_vals_b.shape[1]), dtype=raw_vals_b.dtype)
         else:
-            bg_vals_b = out_alg.get_zero((N,))
+            bg_vals_b = out_alg.get_zero((N, raw_vals_b.shape[1]))
 
-        # Select Values
+        # Select Values (Merge the explicit data with the background/identity)
         final_vals_a = jnp.where(mask_a, raw_vals_a, bg_vals_a)
         final_vals_b = jnp.where(mask_b, raw_vals_b, bg_vals_b)
 

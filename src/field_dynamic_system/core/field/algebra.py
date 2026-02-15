@@ -2,6 +2,8 @@
 # 1. INTERFACE
 # =========================================================
 from abc import ABC
+from typing import Any, Tuple
+
 import jax.numpy as jnp
 from .compositions import (
     AdditionComposition,
@@ -80,5 +82,57 @@ class RealFieldAlgebra(IFieldAlgebra):
     def get_unity(self, shape=(1,)):
         final_shape = shape + (self.dim,)
         return jnp.ones(final_shape, dtype=self.dtype)
+
+class ComplexFieldAlgebra(IFieldAlgebra):
+    """
+    Algebra for fields mapping to the Complex Plane (C).
+    Essential for Quantum Mechanics, Electromagnetism, and Wave Optics.
+    """
+
+    def __init__(self, use_double_precision: bool = False):
+        # Defaulting to complex64 for GPU/TPU speed, complex128 for deep precision
+        self._dtype = jnp.complex128 if use_double_precision else jnp.complex64
+
+    @property
+    def dtype(self) -> Any:
+        return self._dtype
+
+    def get_zero(self, shape: Tuple[int, ...] = ()) -> jnp.ndarray:
+        """
+        Returns 0.0 + 0.0j.
+        Crucial for empty background generation in FieldSpaceComposer.
+        """
+        return jnp.zeros(shape, dtype=self._dtype)
+
+    def get_one(self, shape: Tuple[int, ...] = ()) -> jnp.ndarray:
+        """
+        Returns 1.0 + 0.0j.
+        Crucial for multiplication identities and mask setups.
+        """
+        return jnp.ones(shape, dtype=self._dtype)
+
+    def cast(self, values: Any) -> jnp.ndarray:
+        """
+        Safely casts scalars, lists, or real arrays into the complex field.
+        """
+        # If it's already a JAX array of the exact type, return it immediately (Zero Overhead)
+        if isinstance(values, jnp.ndarray) and values.dtype == self._dtype:
+            return values
+
+        # Otherwise, force the cast to the complex plane
+        return jnp.asarray(values, dtype=self._dtype)
+
+    # --- Algebra-Specific Utility Methods ---
+
+    def get_imaginary_unit(self, shape: Tuple[int, ...] = ()) -> jnp.ndarray:
+        """ Returns 0.0 + 1.0j (i). Highly useful for Schrödinger phase shifts. """
+        return jnp.full(shape, 1j, dtype=self._dtype)
+
+    def absolute_square(self, values: jnp.ndarray) -> jnp.ndarray:
+        """ Returns |z|^2 (Probability Density). Converts complex back to real. """
+        # We ensure it returns a purely real datatype (float32/64)
+        real_dtype = jnp.float64 if self._dtype == jnp.complex128 else jnp.float32
+        return (jnp.abs(values) ** 2).astype(real_dtype)
+
 
 

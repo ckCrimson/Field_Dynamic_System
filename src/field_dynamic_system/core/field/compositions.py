@@ -101,9 +101,9 @@ class MultiplicationComposition(ClosedFieldComposition):
         # 2. Context Safety (Asymmetric Identity)
         # We treat "Empty Context" (b=0) as Identity (1.0) so signals can enter.
         # We DO NOT touch 'a' (Signal). If Signal is 0, it stays 0.
-        b_safe = jnp.where(b == zeros, 1.0, b)
+        #b_safe = jnp.where(b == zeros, 1.0, b)
 
-        return a * b_safe
+        return a * b
 
     def get_identity(self, shape: Optional[Tuple[int, ...]] = None, dtype=jnp.float32) -> Any:
         if shape is None:

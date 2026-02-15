@@ -58,6 +58,7 @@ class GenericMarkovianDiscreteFieldGenerator:
         self.intrinsic_transform = intrinsic_transform
         self.extrinsic_transform = extrinsic_transform
 
+
     def generate_multi_step(self, field_mapper, steps: int,
                             global_mapper=None):
 
@@ -85,7 +86,8 @@ class GenericMarkovianDiscreteFieldGenerator:
 
             # 2. GLOBAL COMPOSITION
             if self.global_composer and global_buffer is not None:
-                global_vals = global_buffer[src_indices]
+                # FIXED: Evaluate the entering environment
+                global_vals = global_buffer[tgt_indices]
                 row_vals = self.global_composer.compose(row_vals, global_vals)
 
             # 3. INTRINSIC TRANSFORM
@@ -138,13 +140,15 @@ class GenericMarkovianDiscreteFieldGenerator:
         def physics_step(i, carry_state):
             prev_state = carry_state
 
+
             # --- PHASE A: EDGE OPERATIONS ---
             # 1. GATHER
             row_vals = prev_state[src_indices]
 
             # 2. GLOBAL COMPOSITION
             if self.global_composer and raw_global_field is not None:
-                global_vals = raw_global_field[src_indices]
+                # FIX: Evaluate the environment the wave is ENTERING
+                global_vals = raw_global_field[tgt_indices]
                 row_vals = self.global_composer.compose(row_vals, global_vals)
 
             # 3. INTRINSIC TRANSFORM
