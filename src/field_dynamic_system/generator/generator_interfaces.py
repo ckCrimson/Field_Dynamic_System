@@ -1,5 +1,5 @@
 from abc import ABC, abstractmethod
-from typing import Optional, Any
+from typing import Optional, Any, Callable
 
 from src.field_dynamic_system.core.field.mappings import IFieldMapper, DiscreteFieldMapper
 from src.field_dynamic_system.neighbor.interfaces import ITopology
@@ -61,21 +61,82 @@ class IFieldGenerator(ABC):
         pass
 
 
+
 # =========================================================
-# 2. CONTINUOUS GENERATOR
+# 2. CONTINUOUS GENERATOR (The Parametric Adapter)
 # =========================================================
+
 class IContinuousFieldGenerator(IFieldGenerator):
     """
     Abstract base for infinite state spaces (e.g., Euclidean Space).
-    User must implement the integration logic (PDE solvers, integral transforms).
+    Uses Paradigm 2 (Parametric): 'Raw data' is a PyTree of parameters, not a grid.
     """
-    # Inherits both generate_multi_step and generate_raw_multi_step
-    pass
 
+    # ---------------------------------------------------------
+    # NEW CONTINUOUS CONTRACTS
+    # ---------------------------------------------------------
+    @abstractmethod
+    def generate_continuous_step(self, params: Any, steps: int, **kwargs) -> Any:
+        """
+        The JAX-compiled physics loop.
+        Takes old parameters, applies continuous physics, returns new parameters.
+        """
+        pass
+
+    @abstractmethod
+    def get_base_function(self) -> Callable[[Any, Any], Any]:
+        """
+        Returns the pure mathematical equation: f(coords, params) -> values
+        Example: A Neural Network forward pass, or a Gaussian formula.
+        """
+        pass
+
+    @abstractmethod
+    def get_initial_parameters(self) -> Any:
+        """
+        Provides the default starting state (e.g., initialized neural network weights).
+        """
+        pass
+
+    # ---------------------------------------------------------
+    # BASE CLASS FULFILLMENT (The Routing Magic)
+    # ---------------------------------------------------------
+    def generate_raw_multi_step(self,
+                                raw_field: Any,
+                                raw_topology: Any,
+                                steps: int,
+                                raw_global_field: Optional[Any] = None) -> Any:
+        """
+        Fulfills the IFieldGenerator raw pipeline contract.
+        In the continuous paradigm:
+        - `raw_field` IS the PyTree of parameters.
+        - `raw_topology` is largely ignored (space is infinite).
+        - `raw_global_field` is passed dynamically as kwargs.
+        """
+        return self.generate_continuous_step(
+            params=raw_field,
+            steps=steps,
+            raw_global_field=raw_global_field
+        )
+
+    def generate_multi_step(self,
+                            current_mapper: IFieldMapper,
+                            steps: int,
+                            global_mapper: Optional[IFieldMapper] = None) -> IFieldMapper:
+        """
+        Fulfills the IFieldGenerator OOP pipeline contract.
+        For continuous systems, the Orchestrator (ContinuousStaticFieldGeneratorSystem)
+        handles the unwrapping and re-wrapping of the mapper.
+        """
+        raise NotImplementedError(
+            "In Continuous systems, OOP evolution is handled strictly by the "
+            "ContinuousStaticFieldGeneratorSystem orchestrator. Call system.generate_field() instead."
+        )
 
 # =========================================================
 # 3. DISCRETE GENERATOR
 # =========================================================
+
 class IDiscreteFieldGenerator(IFieldGenerator):
     """
     Interface for Discrete Field Generators (Grids, Graphs, Networks).

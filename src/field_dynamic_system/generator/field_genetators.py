@@ -26,7 +26,7 @@ class DiscreteFieldGenerator(IDiscreteFieldGenerator, ABC):
     pass
 
 
-class GenericMarkovianDiscreteFieldGenerator:
+class GenericMarkovianDiscreteFieldGenerator(DiscreteFieldGenerator):
     """
     STRICT PIPELINE: Global -> Intrinsic -> Edge -> Chain -> Step -> Extrinsic
 
@@ -42,7 +42,7 @@ class GenericMarkovianDiscreteFieldGenerator:
                  intrinsic_transform=None,
                  extrinsic_transform=None):
 
-        self.topology = topology
+        super().__init__(topology)
         self.kernel = kernel
 
         # 2. THE FIX: Lazy/Conditional Matrix Building

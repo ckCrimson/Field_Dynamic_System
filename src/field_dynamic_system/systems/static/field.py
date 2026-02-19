@@ -3,9 +3,10 @@ import jax
 import jax.numpy as jnp
 from typing import Optional, Any, Union
 
-from src.field_dynamic_system.core.field.mappings import IFieldMapper, DiscreteFieldMapper
+from src.field_dynamic_system.core.field.mappings import IFieldMapper, DiscreteFieldMapper, ContinuousFieldMapper
 from src.field_dynamic_system.core.field.algebra import IFieldAlgebra
-from src.field_dynamic_system.generator.generator_interfaces import IFieldGenerator # Note: Fixed import path
+from src.field_dynamic_system.generator.generator_interfaces import IFieldGenerator, \
+    IContinuousFieldGenerator
 from src.field_dynamic_system.systems.static.state import StaticStateSystem
 from src.field_dynamic_system.systems.static.topology import StaticTopologySystem
 
@@ -80,6 +81,8 @@ class AbstractStaticFieldGeneratorSystem(ABC):
     @abstractmethod
     def _sync_raw_from_mapper(self) -> None:
         pass
+
+
 # ==========================================
 # DISCRETE IMPLEMENTATION
 # ==========================================
@@ -167,9 +170,118 @@ class DiscreteStaticFieldGeneratorSystem(AbstractStaticFieldGeneratorSystem):
         return self.state_system.get_raw_state_space()
 
     # --- INTERNAL UTILS ---
-    def _wrap_raw_to_mapper(self, raw_data: jnp.ndarray) -> DiscreteFieldMapper:
-        return DiscreteFieldMapper(self.get_state_space(), self.algebra, explicit_buffer=raw_data)
+    def _wrap_raw_to_mapper(self, raw_data: jnp.ndarray) -> 'DiscreteFieldMapper':
+        from src.field_dynamic_system.core.field.mappings import DiscreteFieldMapper
+
+        # After the raw JAX evolution, the field is fully computed (explicit).
+        # The analytical background has been permanently "collapsed" into the discrete grid.
+        mapper = DiscreteFieldMapper(self.get_state_space(), self.algebra, explicit_buffer=raw_data)
+
+        # We set the mask to completely True, because every node now has an explicitly computed value.
+        mapper.mask_buffer = jnp.ones((raw_data.shape[0], 1), dtype=bool)
+        return mapper
 
     def _sync_raw_from_mapper(self) -> None:
         if self.current_mapper:
-            self.current_raw_data = self.current_mapper.raw_buffer
+            explicit_array = self.current_mapper.explicit_buffer
+            mask = self.current_mapper.mask_buffer
+
+            # If an analytical background function exists, evaluate it over the topology!
+            if self.current_mapper.background_func is not None:
+                # Get the physical coordinates of every node in the graph
+                coords = self.get_raw_state_space()
+
+                # Sample the analytical math at those coordinates
+                bg_array = self.current_mapper.background_func(coords)
+
+                # Blend them: Use explicit data if the mask is True, otherwise fallback to the math
+                combined_array = jnp.where(mask, explicit_array, bg_array)
+                self.current_raw_data = combined_array
+            else:
+                self.current_raw_data = explicit_array
+
+# ==========================================
+# CONTINUOUS IMPLEMENTATION
+# ==========================================
+
+class ContinuousStaticFieldGeneratorSystem(AbstractStaticFieldGeneratorSystem):
+    """
+    Generic Base Orchestrator for Continuous Field Evolution.
+    The 'raw_data' in this system strictly refers to PARAMETERS (e.g., weights),
+    not spatial arrays.
+    """
+
+    def __init__(self,
+                 generator: IContinuousFieldGenerator,
+                 field_algebra: Any,
+                 state_system: Any,
+                 is_raw_mode: bool = False):
+        # We pass the generator to the abstract base class
+        super().__init__(generator, field_algebra, is_raw_mode)
+        self.state_system = state_system
+
+        # Initialize the system with default parameters if none exist
+        if self.current_raw_data is None:
+            self.clear_field()
+
+    # --- CORE EVOLUTION ---
+    def generate_raw_field(self, steps: int, **kwargs) -> Any:
+        """ Evolves the continuous parameters forward in time. """
+        return self.generator.generate_continuous_step(
+            params=self.current_raw_data,
+            steps=steps,
+            **kwargs
+        )
+
+    # --- ABSTRACTION FULFILLMENT ---
+    def clear_field(self) -> None:
+        """ Resets the field to its default mathematical vacuum state. """
+        initial_params = self.generator.get_initial_parameters()
+        self.set_field(initial_params)
+
+    def get_state_space(self) -> Any:
+        return self.state_system.get_state_space()
+
+    def get_raw_state_space(self) -> Any:
+        # In continuous space, the "raw state space" might just be the dimension bounds,
+        # but we defer to the state_system's definition of it.
+        return self.state_system.get_raw_state_space()
+
+    # --- THE MAGIC BRIDGE ---
+    def _wrap_raw_to_mapper(self, raw_params: Any) -> ContinuousFieldMapper:
+        """
+        Converts PyTree parameters into a queryable ContinuousFieldMapper.
+        """
+        # 1. Fetch the generic mathematical formula from the generator
+        base_func = self.generator.get_base_function()
+
+        # 2. Bind the current parameters to create a pure coordinate evaluator.
+        # This matches the signature expected by ContinuousFieldMapper's background_func.
+        def bound_bg_func(coords):
+            # coords is a jnp.ndarray of shape (N, dim)
+            return base_func(coords, raw_params)
+
+        # 3. Wrap it in your existing Continuous Mapper
+        mapper = ContinuousFieldMapper(
+            state_space=self.get_state_space(),
+            algebra=self.algebra,
+            bg_func=bound_bg_func
+        )
+
+        # 4. CRITICAL: Attach the parameters to the mapper so we can extract them later!
+        # Because functions can't be easily reversed into parameters, we store the
+        # parameters dynamically on the mapper instance.
+        mapper.parameters = raw_params
+        return mapper
+
+    def _sync_raw_from_mapper(self) -> None:
+        """
+        Extracts parameters back out of a ContinuousFieldMapper.
+        """
+        if hasattr(self.current_mapper, 'parameters'):
+            self.current_raw_data = self.current_mapper.parameters
+        else:
+            raise ValueError(
+                "Cannot sync raw data. ContinuousFieldMapper is missing the 'parameters' attribute. "
+                "Did you manually set a pure Python bg_func without passing its underlying weights?"
+            )
