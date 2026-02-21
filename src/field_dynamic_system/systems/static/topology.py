@@ -3,11 +3,12 @@ import numpy as np
 
 from src.field_dynamic_system.neighbor.interfaces import Topology
 from src.field_dynamic_system.core.state.interfaces import StateSpace
+from src.field_dynamic_system.systems.static.interface import ISystem
 
 
 # --- 1. THE GENERIC BASE CLASS ---
 
-class StaticTopologySystem:
+class StaticTopologySystem(ISystem):
     """
     A System that explores reachable states from an initial configuration
     over a specified number of steps (l).
@@ -77,6 +78,18 @@ class StaticTopologySystem:
     def get_lazy_state_space(self) -> StateSpace:
         """Returns a high-performance StateSpace powered by Lazy Proxies."""
         raise NotImplementedError
+
+    def reset(self) -> None:
+        """Clears the baked spatial cache."""
+        self._is_space_baked = False
+        if hasattr(self, '_baked_raw_space_array'):
+            del self._baked_raw_space_array
+
+    def get_raw_data(self) -> Any:
+        """Returns the adjacency matrix if baked, otherwise the initial state."""
+        if hasattr(self, 'topology') and hasattr(self.topology, 'adjacency_matrix'):
+            return self.topology.adjacency_matrix
+        return self._raw_initial_state
 
 
 # --- 2. THE CONCRETE IMPLEMENTATION ---

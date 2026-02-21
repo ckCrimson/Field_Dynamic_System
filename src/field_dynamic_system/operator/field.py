@@ -37,13 +37,16 @@ class Strategies:
 
 class FieldBasedOperator(IOperator):
     def __init__(self, selection_strategy: SelectionStrategy = Strategies.argmax):
-        self.strategy = selection_strategy
+        self._strategy = selection_strategy
 
     def observe(self, field: FieldMapper, context: InteractionContext) -> Observation:
         raw_buffer = field.raw_buffer
-        result_indices = self.strategy(raw_buffer, context)
+        result_indices = self._strategy(raw_buffer, context)
 
         if isinstance(result_indices, list):
             return [field.state_space.get_state_by_id(idx) for idx in result_indices]
         else:
             return field.state_space.get_state_by_id(result_indices)
+
+    def selection_strategy(self):
+        return self._strategy

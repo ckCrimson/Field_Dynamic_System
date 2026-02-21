@@ -1,6 +1,6 @@
 import sys
 
-from tests.test_system.test_complex_2d_walker import GenericMarkovianDiscreteFieldGenerator
+from tests.test_system.test_complex_2d_walker import GenericMarkovianDiscreteFieldGenerator, DiscreteSchrodingerKernel
 
 # Force Python to ignore cached .pyc files so it reads your latest Generator fixes!
 sys.dont_write_bytecode = True
@@ -39,8 +39,7 @@ class Grid8Topology(DiscreteTopology):
 
     def compute_neighbors(self, state_val):
         x, y = state_val if isinstance(state_val, tuple) else state_val.values
-        return [(x, y), (x + 1, y), (x - 1, y), (x, y + 1), (x, y - 1), (x + 1, y + 1), (x - 1, y - 1), (x + 1, y - 1),
-                (x - 1, y + 1)]
+        return [(x, y), (x + 1, y), (x - 1, y), (x, y + 1), (x, y - 1), (x + 1, y + 1), (x - 1, y - 1)]
 
 
 # ==========================================
@@ -78,7 +77,7 @@ def visualize_2d_complex_field(coordinates, final_field_array):
     ax2.grid(True, linestyle='--', alpha=0.3)
 
     # --- DRAW THE WALL ---
-    wall_x, slit_1_y, slit_2_y = 5, 6, -6
+    wall_x, slit_1_y, slit_2_y = 5, 2, -2
     wall_coords_x, wall_coords_y = [], []
     for cx, cy in coords:
         if cx == wall_x and cy != slit_1_y and cy != slit_2_y:
@@ -102,7 +101,7 @@ def test_raw_global_field_generator():
     print("==================================================")
 
     # FIXED: Increased steps so the wave has time to actually pass through the slits
-    STEPS = 25
+    STEPS = 40
 
     print("-> Expanding Raw Topology...")
     topology = Grid8Topology()
@@ -125,7 +124,7 @@ def test_raw_global_field_generator():
 
     print("-> Constructing Raw Global Field...")
     mask = np.ones((num_nodes, 1), dtype=np.complex64)
-    wall_x, slit_1_y, slit_2_y = 5, 6, -6
+    wall_x, slit_1_y, slit_2_y = 5, 2, -2
 
     for i, coords in enumerate(topology._id_to_raw):
         x, y = coords
@@ -138,6 +137,7 @@ def test_raw_global_field_generator():
     print("-> Initializing Generator...")
     generator = GenericMarkovianDiscreteFieldGenerator(
         topology=None,
+        kernel=DiscreteSchrodingerKernel(),
         step_composer=AdditionComposition(),
         chain_composer=MultiplicationComposition(),
         global_composer=MultiplicationComposition(),

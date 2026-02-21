@@ -67,3 +67,9 @@ class IOperator(ABC):
                           rendering or logging.
         """
         pass
+
+    @property
+    @abstractmethod
+    def selection_strategy(self) -> Any:
+        """ Defines the algorithmic strategy used to select the next state. """
+        pass

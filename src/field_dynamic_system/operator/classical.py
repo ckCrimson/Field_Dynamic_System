@@ -19,7 +19,7 @@ class ClassicalOperator(IOperator):
             transition_fn: Function f(state, action_id) -> next_state.
                            If None, operator acts as a pass-through (Identity).
         """
-        self.selection_strategy = selection_strategy
+        self._selection_strategy = selection_strategy
 
     def observe(self, state: Any, context: InteractionContext) -> Observation:
         """
@@ -31,8 +31,11 @@ class ClassicalOperator(IOperator):
             The Observed State (either the same state or the next calculated state).
         """
         # 1. Active Mode: Calculate Trajectory
-        if self.selection_strategy is not None:
-            return self.selection_strategy(state, context.action_id)
+        if self._selection_strategy is not None:
+            return self._selection_strategy(state, context.action_id)
 
         # 2. Passive Mode: What you see is what you have
         return state
+
+    def selection_strategy(self):
+        return self._selection_strategy

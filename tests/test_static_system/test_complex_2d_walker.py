@@ -104,6 +104,56 @@ def visualize_2d_complex_field(coordinates, final_field_array):
     plt.tight_layout()
     plt.show()
 
+def visualize_2d_complex_field_linear(coordinates, final_field_array):
+    print("\n-> Visualizing 2D Complex Wave (Linear Scale Rendering)...")
+    coords = np.array(coordinates)
+    x, y = coords[:, 0], coords[:, 1]
+    np_field = np.array(final_field_array).flatten()
+    magnitudes = np.abs(np_field)
+    phases = np.angle(np_field)
+
+    fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(18, 8))
+    fig.suptitle(f"Double-Slit Diffraction (Linear Scale, N={len(magnitudes)})", fontsize=16)
+
+    mag_max = np.max(magnitudes)
+
+    # --- THE FIX: Mask the amplitude so the 0.0 shadow becomes invisible (NaN) ---
+    wave_exists = magnitudes > (mag_max * 1e-5)
+    magnitudes_masked = np.where(wave_exists, magnitudes, np.nan)
+    phases_masked = np.where(wave_exists, phases, np.nan)
+
+    # --- THE CHANGE: Linear Scale Amplitude Plot ---
+    # Removed colors.LogNorm and explicitly set linear vmin/vmax
+    sc1 = ax1.scatter(x, y, c=magnitudes_masked, cmap='plasma', s=40, marker='s',
+                      vmin=0.0, vmax=mag_max, edgecolors='none')
+    fig.colorbar(sc1, ax=ax1, label='Magnitude |z| (Linear Scale)')
+    ax1.set_title('Probability Amplitude')
+    ax1.axis('equal');
+    ax1.grid(True, linestyle='--', alpha=0.3)
+
+    # Plot Phase (Phase is naturally linear from -pi to pi)
+    sc2 = ax2.scatter(x, y, c=phases_masked, cmap='hsv', s=40, marker='s',
+                      vmin=-np.pi, vmax=np.pi, edgecolors='none')
+    fig.colorbar(sc2, ax=ax2, label='Phase arg(z) (Radians)')
+    ax2.set_title('Wave Phase (Cleaned)')
+    ax2.axis('equal');
+    ax2.grid(True, linestyle='--', alpha=0.3)
+
+    # --- DRAW THE WALL ---
+    wall_x, slit_1_y, slit_2_y = 5, 6, -6
+    wall_coords_x, wall_coords_y = [], []
+    for cx, cy in coords:
+        if cx == wall_x and cy != slit_1_y and cy != slit_2_y:
+            wall_coords_x.append(cx)
+            wall_coords_y.append(cy)
+
+    ax1.scatter(wall_coords_x, wall_coords_y, color='cyan', s=20, marker='x', label='Absorbing Wall')
+    ax2.scatter(wall_coords_x, wall_coords_y, color='black', s=20, marker='x')
+    ax1.legend(loc="upper left")
+
+    plt.tight_layout()
+    plt.show()
+
 
 # ==========================================
 # 4. EXECUTION
@@ -113,7 +163,7 @@ def test_raw_global_field_generator():
     print("⚛️  ISOLATED GENERATOR TEST (Zero File Imports)")
     print("==================================================")
 
-    STEPS = 90
+    STEPS = 120
 
     topology = Grid8Topology()
     topology.expand_frontier([(0, 0)], depth=STEPS)
@@ -162,7 +212,7 @@ def test_raw_global_field_generator():
     )
     print(f"   Execution Time: {time.time() - t0:.4f}s")
 
-    visualize_2d_complex_field(topology._id_to_raw, final_field)
+    visualize_2d_complex_field_linear(topology._id_to_raw, final_field)
 
 if __name__ == "__main__":
     test_raw_global_field_generator()

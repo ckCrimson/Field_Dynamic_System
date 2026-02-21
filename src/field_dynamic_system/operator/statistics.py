@@ -26,3 +26,6 @@ class ExpectationOperator(IOperator):
         # 2. Compute Expectation
         # Now shapes match: (N,) dot (N,) -> scalar
         return float(jnp.dot(probs, values_array))
+
+    def selection_strategy(self) -> Any:
+        return None

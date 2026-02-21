@@ -13,6 +13,8 @@ from src.field_dynamic_system.generator.kernel import AbstractTransitionKernel
 
 import matplotlib.pyplot as plt
 
+from tests.test_system.test_complex_2d_walker import DiscreteSchrodingerKernel
+
 
 # 1. THE DUMMY KERNEL
 class DummyKernel(AbstractTransitionKernel):
@@ -83,7 +85,7 @@ def test_bare_metal_data_flow():
     print("-> Phase 4: Executing JAX Physics...")
     gen = GenericMarkovianDiscreteFieldGenerator(
         topology=None,
-        kernel=DummyKernel(),
+        kernel=DiscreteSchrodingerKernel(),
         step_composer=AdditionComposition(),
         chain_composer=MultiplicationComposition(),
         intrinsic_transform=None,  # Removed to prevent double-normalization scaling issues per step
@@ -126,7 +128,7 @@ def test_bare_metal_data_flow():
     print("==================================================")
 
     assert 0.99 < final_mass < 1.01, "Mass Leak!"
-    #visualize_hex_field(topology, final_raw_field)
+    visualize_hex_field(topology, final_raw_field)
 
 
 def visualize_hex_field(topology, final_field_array):

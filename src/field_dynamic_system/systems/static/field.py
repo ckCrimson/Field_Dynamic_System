@@ -7,11 +7,12 @@ from src.field_dynamic_system.core.field.mappings import IFieldMapper, DiscreteF
 from src.field_dynamic_system.core.field.algebra import IFieldAlgebra
 from src.field_dynamic_system.generator.generator_interfaces import IFieldGenerator, \
     IContinuousFieldGenerator
+from src.field_dynamic_system.systems.static.interface import ISystem
 from src.field_dynamic_system.systems.static.state import StaticStateSystem
 from src.field_dynamic_system.systems.static.topology import StaticTopologySystem
 
 
-class AbstractStaticFieldGeneratorSystem(ABC):
+class AbstractStaticFieldGeneratorSystem(ABC, ISystem):
     def __init__(self, generator: IFieldGenerator, field_algebra: IFieldAlgebra, is_raw_mode: bool):
         self.generator = generator
         self.algebra = field_algebra
@@ -81,6 +82,15 @@ class AbstractStaticFieldGeneratorSystem(ABC):
     @abstractmethod
     def _sync_raw_from_mapper(self) -> None:
         pass
+
+    # --- ISystem Contract Fulfillment ---
+    def reset(self) -> None:
+        """Alias for clear_field to satisfy ISystem."""
+        self.clear_field()
+
+    def get_raw_data(self) -> Any:
+        """Alias for get_raw_fields to satisfy ISystem."""
+        return self.get_raw_fields()
 
 
 # ==========================================

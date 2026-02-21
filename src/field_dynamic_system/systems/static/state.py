@@ -3,11 +3,13 @@ import numpy as np
 
 # Use the Generic Interface
 from src.field_dynamic_system.core.state.interfaces import StateSpace
+from src.field_dynamic_system.systems.static.interface import ISystem
+
 
 
 # --- 1. THE GENERIC BASE CLASS ---
 
-class StaticStateSystem:
+class StaticStateSystem(ISystem):
     """
     A System that holds the Initial Configuration of N entities.
     """
@@ -22,6 +24,15 @@ class StaticStateSystem:
         self.state_class = type(initial_state[0]) if isinstance(initial_state, (list, tuple)) else type(initial_state)
 
         self._raw_configuration = self._process_initial_state(initial_state)
+
+    # --- ISystem Contract Fulfillment ---
+    def reset(self) -> None:
+            """Restores the state configuration to its initial state."""
+            self._raw_configuration = self._process_initial_state(self.initial_state)
+
+    def get_raw_data(self) -> Any:
+            """Alias for get_raw_state(-1) to satisfy ISystem."""
+            return self.get_raw_state(entity_id=-1)
 
     @classmethod
     def from_raw_data(cls,
