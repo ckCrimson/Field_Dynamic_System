@@ -9,62 +9,72 @@ from ..core.state.continous import HypersphereSpace  # Assuming this exists or w
 
 from abc import abstractmethod
 
+from abc import abstractmethod
+from typing import Any
 
+
+# Assuming imports: Topology, IContinuousStateSpace, StateSpace, HypersphereSpace
 
 class ContinuousTopology(Topology):
     """
     Base class for Continuous Reachability.
-
-    Unlike DiscreteTopology, we CANNOT automatically compile a 'matrix'
-    for multi-step reachability because the state space is uncountable.
-
-    Strategy:
-    - Simple Topologies (Metric): We implement exact multi-step.
-    - Complex Topologies: The User must implement multi-step.
+    Supports both OOP StateSpace generation and raw DOD boundary calculations.
     """
 
-    def __init__(self, state_space: IContinuousStateSpace):
+    def __init__(self, state_space: 'IContinuousStateSpace'):
         if not isinstance(state_space, IContinuousStateSpace):
             raise TypeError("ContinuousTopology requires an IContinuousStateSpace.")
         super().__init__(state_space)
 
+    # --- OOP PATH (Human/Orchestrator Facing) ---
+
     @abstractmethod
-    def successor(self, state: Any) -> StateSpace:
-        """Returns the immediate reachable set (One Step)."""
+    def successor(self, state: Any) -> 'StateSpace':
+        """Returns the immediate reachable set (One Step) as an OOP StateSpace object."""
         pass
 
-    def multi_step_successor(self, initial_state: Any, steps: int) -> StateSpace:
-        """
-        Calculates reachability after N steps.
-
-        Default Implementation:
-        If the user does not override this, we try to perform recursive expansion
-        assuming the StateSpace object supports some form of 'minkowski_sum' or 'expansion'.
-
-        If that is impossible, we raise an Error forcing the user to implement it.
-        """
-        # 1. Base Case
+    def multi_step_successor(self, initial_state: Any, steps: int) -> 'StateSpace':
+        """Calculates reachability after N steps as an OOP StateSpace object."""
         if steps == 0:
-            # We need to wrap the single point into a Shape (e.g., 0-radius ball)
-            # This depends on the space type. Let's assume HyperSphere for generic R^n.
             return HypersphereSpace(initial_state, radius=0.0)
-
-        # 2. Optimization Hook
-        # Users should override this method for exact math (e.g. radius * steps).
         return self._compute_multi_step_manually(initial_state, steps)
 
-    def _compute_multi_step_manually(self, initial_state: Any, steps: int) -> StateSpace:
-        """
-        Fallback logic.
-        For many continuous systems, R^k(x) is difficult to compute generically.
-        """
+    def _compute_multi_step_manually(self, initial_state: Any, steps: int) -> 'StateSpace':
         raise NotImplementedError(
             "Exact multi-step reachability cannot be computed generically for continuous spaces. "
-            "Please implement 'multi_step_successor' in your Topology subclass "
-            "or use a specific implementation like MetricTopology."
+            "Please implement 'multi_step_successor'."
         )
 
+    # --- RAW DOD PATH (JAX/GPU Facing) ---
 
+    
+    def get_raw_successor(self, state_raw: Any) -> Any:
+        """
+        Returns the immediate reachable bounds as raw arrays.
+        For JAX performance, this MUST return flat arrays or tuples of arrays.
+        Example: Returns (low_array, high_array) for a bounding box.
+        """
+        pass
+
+    def get_raw_multi_step_successor(self, initial_state_raw: Any, steps: int) -> Any:
+        """
+        Returns the reachable bounds after N steps as raw arrays.
+        """
+        if steps == 0:
+            # Base case: The bounds are just the exact starting point.
+            # (Assuming the raw format expects a tuple of (low, high) bounds)
+            return (initial_state_raw, initial_state_raw)
+
+        return self._compute_raw_multi_step_manually(initial_state_raw, steps)
+
+    def _compute_raw_multi_step_manually(self, initial_state_raw: Any, steps: int) -> Any:
+        """
+        Fallback logic for raw multi-step arrays.
+        """
+        raise NotImplementedError(
+            "Raw multi-step reachability must be implemented by the specific ContinuousTopology subclass. "
+            "It should return mathematically expanded bounds (e.g., Minkowski sum) as raw arrays."
+        )
 # --- CONCRETE IMPLEMENTATION 1: Metric Topology ---
 # This is the "Standard" one we provide.
 

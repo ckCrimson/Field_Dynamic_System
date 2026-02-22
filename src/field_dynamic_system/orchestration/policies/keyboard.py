@@ -1,5 +1,5 @@
 import sys
-from typing import Any, Dict
+from typing import Any, Dict, Tuple
 from .base import IPolicy
 
 
@@ -37,15 +37,23 @@ class KeyboardPolicy(IPolicy):
             finally:
                 termios.tcsetattr(fd, termios.TCSADRAIN, old_settings)
 
-    def get_action(self, state: Any) -> Dict[str, Any]:
-        """Blocks and waits for the user to press a valid key."""
+    def get_action(self, state: Any) -> Tuple[Dict[str, Any], Dict[str, Any]]:
+        """
+        Blocks and waits for the user to press a valid key.
+        Returns: (runner_metadata, physics_kwargs)
+        """
         while True:
             key = self._get_keypress()
 
             if key == 'q':
-                return {"quit": True, "action_name": "Quit"}
+                # Return (runner_meta, physics_data)
+                return {"quit": True, "action_name": "Quit"}, {}
 
             if key in self._action_map:
                 action_id = self._action_map[key]
                 name = "Left" if action_id == -1 else "Right" if action_id == 1 else "Rest"
-                return {"action_id": action_id, "quit": False, "action_name": name}
+
+                runner_meta = {"quit": False, "action_name": name}
+                physics_data = {"action_id": action_id}
+
+                return runner_meta, physics_data

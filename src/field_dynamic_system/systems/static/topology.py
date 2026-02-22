@@ -1,5 +1,6 @@
 from typing import Any, Optional, Type
 import numpy as np
+import jax.numpy as jnp
 
 from src.field_dynamic_system.neighbor.interfaces import Topology
 from src.field_dynamic_system.core.state.interfaces import StateSpace
@@ -236,3 +237,105 @@ class DiscreteStaticTopologySystem(StaticTopologySystem):
         else:
             # Generic StateSpaces (like String/Abstract) expect 'states'
             return space_class(states=objects)
+
+
+
+
+class ContinuousStaticTopologySystem(StaticTopologySystem):
+    """
+    Concrete implementation for Continuous Topologies.
+    Instead of exploring discrete graph nodes, this system manages
+    continuous boundary expansions (e.g., Hypercubes, Hyperspheres).
+    """
+
+    def _process_initial_state(self, initial_state: Any) -> jnp.ndarray:
+        """Extracts the raw numeric vector from OOP states."""
+        if isinstance(initial_state, (jnp.ndarray, np.ndarray)):
+            return jnp.array(initial_state, dtype=jnp.float32)
+        if hasattr(initial_state, 'vector'):
+            return jnp.array(initial_state.vector, dtype=jnp.float32)
+        if hasattr(initial_state, 'values'):
+            return jnp.array(initial_state.values, dtype=jnp.float32)
+        return jnp.array(initial_state, dtype=jnp.float32)
+
+    @classmethod
+    def from_raw_data(cls,
+                      raw_initial_state: Any,
+                      topology: Any,  # Can be raw data (like a radius) or Topology object
+                      state_space: Any = None,  # Accepts Raw Data (e.g., tuples of bounds)
+                      state_class: Optional[Type] = None):
+        """High-Performance Factory (Data Path)."""
+        instance = cls.__new__(cls)
+        instance.topology = topology
+        instance._raw_initial_state = jnp.array(raw_initial_state, dtype=jnp.float32)
+        instance.initial_state = None
+        instance.state_space = state_space  # This might just be raw limit data now
+        instance.state_class = state_class
+        instance._is_space_baked = False
+        return instance
+
+    def multi_step_successor(self, steps: int, initial_state: Optional[Any] = None) -> 'StateSpace':
+        """OOP Path: Returns a StateSpace object defining the expanded reachable zone."""
+        target_state = initial_state if initial_state is not None else self.initial_state
+        if target_state is None:
+            raise ValueError("No initial state provided for multi_step_successor.")
+        return self.topology.multi_step_successor(target_state, steps)
+
+    def get_raw_multistep(self, steps: int, initial_state_raw: Optional[Any] = None) -> Any:
+        """
+        DOD Path: Returns the raw bounds of the expanded reachable zone.
+        e.g., returns (lows_array, highs_array) for a hypercube.
+        """
+        target_raw = initial_state_raw if initial_state_raw is not None else self._raw_initial_state
+        if target_raw is None:
+            raise ValueError("No raw initial state provided.")
+
+        if hasattr(self.topology, 'get_raw_multi_step_successor'):
+            return self.topology.get_raw_multi_step_successor(target_raw, steps)
+
+        raise NotImplementedError(
+            "The provided topology does not support raw continuous multi-step expansion."
+        )
+
+    # --- BAKING AND SPACE RETRIEVAL API ---
+
+    def create_multi_step_states_space(self, steps: int) -> None:
+        """
+        Bakes the reachable continuous universe into memory.
+        In continuous space, we don't store 10,000 states; we store the final bounding limits.
+        """
+        # Fetch the expanded boundaries as raw arrays (e.g., lows and highs)
+        self._baked_raw_space_bounds = self.get_raw_multistep(steps=steps)
+        self._is_space_baked = True
+
+    def get_raw_state_space(self) -> Any:
+        """Returns the raw ingredients (e.g., (low, high) tuples)."""
+        if not self._is_space_baked:
+            # If not baked, fallback to the provided global space limits (if any)
+            if hasattr(self.state_space, 'get_raw_data'):
+                return self.state_space.get_raw_data()
+            return self.state_space  # Might just be raw data from from_raw_data
+
+        return self._baked_raw_space_bounds
+
+    def get_state_space(self) -> 'StateSpace':
+        """Returns the fully instantiated OOP StateSpace (e.g., a HypercubeSpace)."""
+        if not self._is_space_baked:
+            raise RuntimeError("Must call create_multi_step_states_space() first.")
+
+        # In OOP flow, multi_step_successor already returns the exact StateSpace object
+        return self.multi_step_successor(
+            steps=1)  # Usually, we track the baked steps internally, but for simplicity here we assume it's stored.
+
+    def get_lazy_state_space(self) -> 'StateSpace':
+        """Continuous spaces are generally computationally cheap to instantiate, so lazy is same as normal."""
+        return self.get_state_space()
+
+    def get_raw_data(self) -> Any:
+        """
+        Returns the analog of an Adjacency Matrix for Continuous Space:
+        The immediate reachable boundaries (T_0) for the initial state.
+        """
+        if hasattr(self.topology, 'get_raw_successor'):
+            return self.topology.get_raw_successor(self._raw_initial_state)
+        return self._raw_initial_state

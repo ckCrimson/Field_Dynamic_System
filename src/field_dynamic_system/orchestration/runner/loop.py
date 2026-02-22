@@ -2,7 +2,6 @@ from typing import Callable, Optional
 from src.field_dynamic_system.systems.dynamic.base import DynamicSystem
 from src.field_dynamic_system.orchestration.policies.base import IPolicy
 
-
 class SimulationRunner:
     """
     The self-contained execution loop.
@@ -24,20 +23,21 @@ class SimulationRunner:
             if max_steps is not None and step >= max_steps:
                 break
 
-            # 1. Driver decides what to do
-            context_kwargs = self.policy.get_action(self.system.state)
+            # 1. Driver decides what to do (Unpack the cleanly separated data)
+            runner_meta, physics_data = self.policy.get_action(self.system.state)
 
-            if context_kwargs.get("quit", False):
+            if runner_meta.get("quit", False):
                 break
 
             # 2. Time passes
             self.system.clock.tick(1)
 
-            # 3. Physics engine applies the move
-            self.system.apply_operator(context_kwargs=context_kwargs)
+            # 3. Physics engine applies the move (ONLY gets physics data)
+            self.system.apply_operator(context_kwargs=physics_data)
 
-            # 4. Draw the result
+            # 4. Draw the result (Merge them back together just for the UI printout)
             if render_callback:
-                render_callback(self.system, context_kwargs)
+                combined_context = {**runner_meta, **physics_data}
+                render_callback(self.system, combined_context)
 
             step += 1

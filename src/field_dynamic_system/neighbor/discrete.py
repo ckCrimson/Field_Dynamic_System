@@ -205,6 +205,19 @@ class DiscreteTopology(Topology, ABC):
 
         return ids
 
+    def get_raw_rewired_matrix(self, current_state_raw: Any, current_matrix: sparse.BCOO) -> sparse.BCOO:
+        """
+        Calculates the dynamically rewired adjacency matrix based on the current state.
+
+        Default Implementation (Static):
+        Assumes the topology does not change over time, returning the matrix untouched.
+
+        Override Instruction:
+        Subclasses representing dynamic graphs (e.g., breaking connections under stress)
+        MUST override this to return a freshly computed sparse.BCOO matrix.
+        """
+        return current_matrix
+
     def _raw_ensure_expanded(self, ids):
         if self._fast_path_active: return
         unknown = [i for i in ids if i not in self._raw_explored]
