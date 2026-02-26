@@ -1,5 +1,8 @@
 from typing import Any, Dict, List, Optional
 from collections import deque
+
+import numpy as np
+
 from src.field_dynamic_system.clock.interfaces import IInternalClock
 
 
@@ -54,3 +57,23 @@ class WindowedInternalClock(IInternalClock):
         self._tick = 0
         self._iteration = 0
         self._history.clear()
+
+
+class HistoryClock(WindowedInternalClock):
+    """
+    A Clock that remembers the past.
+    Stores the raw state data at every tick.
+    """
+    def __init__(self):
+        super().__init__()
+        self._history = [] # Stores [tick_0_state, tick_1_state, ...]
+
+    def record(self, raw_state):
+        """Snapshots the current state into history."""
+        # Convert JAX array to standard NumPy for plotting efficiency
+        self._history.append(np.array(raw_state))
+
+    def get_history_matrix(self):
+        """Returns the full history as a (T, D) numpy matrix."""
+        if not self._history: return np.empty((0, 2))
+        return np.vstack(self._history)

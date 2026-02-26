@@ -29,7 +29,7 @@ class DiscreteTopology(Topology, ABC):
         self._raw_explored = set()
         self._raw_dirty = False
 
-    @abstractmethod
+
     def compute_neighbors(self, state_val: Any) -> Sequence[Any]:
         pass
 

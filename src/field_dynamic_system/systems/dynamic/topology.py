@@ -4,10 +4,11 @@ from typing import Any, Dict, Optional, Type, Callable
 import jax.numpy as jnp
 
 from src.field_dynamic_system.clock.interfaces import IInternalClock
+from src.field_dynamic_system.core import StateSpace
 from src.field_dynamic_system.operator import InteractionContext, IOperator
 from src.field_dynamic_system.systems.static.interface import ISystem
 from src.field_dynamic_system.systems.static.topology import ContinuousStaticTopologySystem, \
-    DiscreteStaticTopologySystem
+    DiscreteStaticTopologySystem, StaticTopologySystem
 
 
 class TopologyDynamicSystem(ISystem, ABC):
@@ -95,7 +96,7 @@ class TopologyDynamicSystem(ISystem, ABC):
     def _apply_oop_physics(self, context: 'InteractionContext') -> Any:
         """Passes the strict context to the IOperator wrapper."""
         return self._operator.observe(
-            state=self._current_raw_state,
+            system_state=self._current_raw_state,
             context=context
         )
 
