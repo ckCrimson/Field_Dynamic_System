@@ -1,6 +1,7 @@
 import sys
 
-from tests.test_system.test_complex_2d_walker import GenericMarkovianDiscreteFieldGenerator, DiscreteSchrodingerKernel
+from src.field_dynamic_system.generator import GenericMarkovianDiscreteFieldGenerator
+from tests.test_static_system.test_complex_2d_walker import DiscreteSchrodingerKernel
 
 # Force Python to ignore cached .pyc files so it reads your latest Generator fixes!
 sys.dont_write_bytecode = True

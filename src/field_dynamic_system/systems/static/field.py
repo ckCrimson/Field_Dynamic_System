@@ -12,7 +12,7 @@ from src.field_dynamic_system.systems.static.state import StaticStateSystem
 from src.field_dynamic_system.systems.static.topology import StaticTopologySystem
 
 
-class AbstractStaticFieldGeneratorSystem(ABC, ISystem):
+class AbstractStaticFieldGeneratorSystem( ISystem):
     def __init__(self, generator: IFieldGenerator, field_algebra: IFieldAlgebra, is_raw_mode: bool):
         self.generator = generator
         self.algebra = field_algebra

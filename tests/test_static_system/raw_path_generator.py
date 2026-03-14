@@ -13,7 +13,7 @@ from src.field_dynamic_system.generator.kernel import AbstractTransitionKernel
 
 import matplotlib.pyplot as plt
 
-from tests.test_system.test_complex_2d_walker import DiscreteSchrodingerKernel
+from tests.test_static_system.test_complex_2d_walker import DiscreteSchrodingerKernel
 
 
 # 1. THE DUMMY KERNEL
