@@ -1,49 +1,18 @@
-# Field Dynamic System (FDS) Framework
+# Field Dynamic System (FDS) - JAX Backend
 
-This repository contains the prototype implementation of the Field Dynamic System (FDS) framework.
+> **A Proof-of-Concept physics engine bridging high-level Object-Oriented design with blisteringly fast, bare-metal Data-Oriented execution via JAX XLA.**
 
-## Project Status
+![Quantum Interference Plot](image_c524e6.png)
+*Above: A 100-step quantum random walk interference pattern (featuring double-slit environmental constraints and native wave collapse) executed in under 1 second on a standard CPU.*
 
-**Status: Archived / Prototype**
+## 📖 Overview
 
-This project was initially started to implement a framework for FDS to handle single-entity simulations and explore the core concepts. While the single-entity simulation was successfully built, architectural bottlenecks and design flaws became apparent, which would make scaling to multi-agent interactions highly complex and difficult to maintain. 
+In scientific computing and complex system simulation, engineers are constantly forced to choose between readability and performance:
+* **Object-Oriented Programming (OOP)** is excellent for human developers. It allows for clean domain modeling, flexible abstractions, and readable code. However, CPUs struggle with it due to memory fragmentation and pointer chasing.
+* **Data-Oriented Design (DOD)** is what modern hardware craves. Flattened, contiguous arrays processed via SIMD instructions (like JAX or NumPy tensors) are orders of magnitude faster. Yet, writing pure tensor math to manage dynamic logic is incredibly difficult to scale and maintain.
 
-As a result, a separate, more flexible architecture has been designed elsewhere. This repository serves as a learning milestone and a working prototype for the initial design. It is no longer under active development.
+**The Field Dynamic System (FDS)** was built to solve this friction. It is a framework designed to simulate entities interacting with complex spatial fields—from heat diffusion to quantum random walks. 
 
-## Overview
+This specific implementation acts as a **Compiler Bridge**. It allows developers to define their universe using standard, readable Python objects (defining discrete topologies, custom kernels, and environmental masks). Then, using the `compile_bare_metal()` factory, the framework silently strips away the OOP abstractions and compiles the definitions into a pure, stateless mathematical closure. 
 
-The framework provides an object-oriented and bare-metal JAX (Data-Oriented Design) execution approach to evolving entities within dynamic fields. It handles:
-*   Static and Dynamic system topologies
-*   Discrete and Continuous fields
-*   State space management
-*   Internal clock synchronization
-
-## Demo Scenarios
-
-You can run the demonstration scenarios located in the `examples` directory to see the single-entity simulation in action.
-
-### Running the Demo
-
-To run a basic discrete field simulation:
-
-```bash
-python examples/demo_discrete_field.py
-```
-
-### Key Components
-
-*   `src/field_dynamic_system/systems/dynamic/field.py`: Contains the core logic for the dynamic field system, including both discrete and continuous implementations.
-*   `src/field_dynamic_system/orchestration/`: Manages the execution loops and policies.
-*   `src/field_dynamic_system/core/`: Defines the foundational state space models.
-
-## Dependencies
-
-This project uses Poetry for dependency management. Core dependencies include:
-*   `jax`
-*   `jaxlib`
-*   `numpy`
-
-To install dependencies:
-```bash
-poetry install
-```
+Using **JAX and XLA**, the entire field evolution, adjacency matrix multiplication, and entity observation sequence is JIT-compiled into highly optimized C++ / machine code, allowing for massive simulations to run in milliseconds without sacrificing developer experience.
