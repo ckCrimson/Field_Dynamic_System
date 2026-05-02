@@ -12,7 +12,7 @@ The framework is agnostic to the physics being simulated. By simply swapping the
 Below is a side-by-side comparison of the same entity evolving on a 2D grid, differentiated only by the physics kernel applied:
 
 <p align="center">
-  <img src="path-to-your-classical-image.png" alt="Classical Random Walk" width="45%" />
+  <img src="real_random_walker.png" alt="Classical Random Walk" width="45%" />
   &nbsp; &nbsp; &nbsp; &nbsp;
   <img src="complex_random_walkr.png" alt="Quantum Random Walk" width="45%" />
 </p>
