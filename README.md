@@ -2,8 +2,8 @@
 
 > **A Proof-of-Concept physics engine that compiles high-level Object-Oriented simulations into high-performance JAX closures.**
 
-![Quantum Interference Plot](image_c524e6.png)
-*Above: A 900-step quantum random walk interference pattern (featuring double-slit environmental constraints and native wave collapse) executed in under 1 second.*
+![Quantum Interference Plot](double_slit_quntum_walker.png)
+*Above: A 150-step quantum random walk interference pattern (featuring double-slit environmental constraints and native wave collapse) executed in under 1 second.*
 
 ## 📊 Domain Flexibility: Classical vs. Quantum
 
