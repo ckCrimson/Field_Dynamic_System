@@ -14,7 +14,7 @@ Below is a side-by-side comparison of the same entity evolving on a 2D grid, dif
 <p align="center">
   <img src="path-to-your-classical-image.png" alt="Classical Random Walk" width="45%" />
   &nbsp; &nbsp; &nbsp; &nbsp;
-  <img src="path-to-your-quantum-image.png" alt="Quantum Random Walk" width="45%" />
+  <img src="complex_random_walkr.png" alt="Quantum Random Walk" width="45%" />
 </p>
 
 * **Left (Classical Walker):** Driven by a `StandardDiffusionKernel`. The probability spreads smoothly and symmetrically, representing standard Brownian motion or heat dissipation.
